@@ -27,6 +27,7 @@ export async function register(_state: RegisterState, formData: FormData): Promi
   if (values.phone && !/^\+?[\d\s()-]{7,20}$/.test(values.phone)) return fail("Enter a phone number with digits only, or leave it blank.");
   if (password.length < 10 || password.length > 200) return fail("Choose a password of at least 10 characters.");
   if (formData.get("adult") !== "on") return fail("RepCount is for adults. Please confirm you’re 18 or over.");
+  if (formData.get("privacy") !== "on") return fail("Please accept the privacy policy to create your account.");
 
   const ip = (await headers()).get("x-forwarded-for")?.split(",")[0]?.trim() ?? "local";
   const key = `register:${ip}`;
@@ -34,7 +35,7 @@ export async function register(_state: RegisterState, formData: FormData): Promi
   if (await emailTaken(values.email)) return fail("An account with this email already exists. Sign in instead.");
   await recordLoginFailure([key]);
 
-  const userId = await createUser({role: "member", name: values.name, email: values.email, password});
+  const userId = await createUser({role: "member", name: values.name, email: values.email, password, privacyAccepted: true});
   const clientId = `c-${randomBytes(6).toString("hex")}`;
   await store.createClient({
     id: clientId, userId, name: values.name, initials: initialsOf(values.name, "RC"), email: values.email,

@@ -41,21 +41,43 @@ export async function listTrainers(): Promise<Trainer[]> {
   return rows.map(r => ({...publicUser(r), title: r.title ?? "Trainer", canUsePassword: r.password_hash !== null, active: r.active, createdAt: r.created_at.toISOString()}));
 }
 
-/** Admin edit of a trainer's display name and role title. */
-export async function updateTrainer(id: string, name: string, title: string) {
+/**
+ * Admin edit of a trainer's or admin's name, sign-in email, role title and (optionally) a new password.
+ * A new password signs the person out everywhere; leaving it blank keeps the current one.
+ */
+export async function updateStaffUser(id: string, role: "trainer" | "admin", input: {name: string; email: string; title: string | null; password: string | null}) {
   const sql = await db();
-  const [row] = await sql<{name: string}[]>`update users set name = ${name}, initials = ${initialsOf(name, "TR")}, title = ${title} where id = ${id} and role = 'trainer' returning name`;
+  const [row] = await sql<{name: string}[]>`update users set name = ${input.name}, initials = ${initialsOf(input.name, role === "trainer" ? "TR" : "SA")}, email = ${input.email}, title = ${input.title}
+    ${input.password ? sql`, password_hash = ${hashPassword(input.password)}, session_version = session_version + 1` : sql``}
+    where id = ${id} and role = ${role} returning name`;
   return row?.name ?? null;
+}
+
+export const updateTrainer = (id: string, input: {name: string; email: string; title: string; password: string | null}) => updateStaffUser(id, "trainer", input);
+
+export type AdminAccount = {id: string; name: string; email: string; active: boolean; canUsePassword: boolean};
+
+export async function listAdmins(): Promise<AdminAccount[]> {
+  const sql = await db();
+  const rows = await sql<Row[]>`select * from users where role = 'admin' order by created_at, name`;
+  return rows.map(r => ({id: r.id, name: r.name, email: r.email, active: r.active, canUsePassword: r.password_hash !== null}));
+}
+
+/** True when another user already signs in with this email. */
+export async function emailTakenByOther(email: string, userId: string) {
+  const found = await byEmail(email);
+  return !!found && found.id !== userId;
 }
 
 export const initialsOf = (name: string, fallback: string) => name.split(/\s+/).filter(Boolean).map(w => w[0]).join("").slice(0, 2).toUpperCase() || fallback;
 
-export async function createUser(input: {role: Role; name: string; email: string; password: string | null; title?: string}) {
+/** `privacyAccepted` is true when the person ticked the privacy policy themselves (self-registration). */
+export async function createUser(input: {role: Role; name: string; email: string; password: string | null; title?: string; privacyAccepted?: boolean}) {
   const sql = await db();
   const id = `u-${input.role}-${randomBytes(6).toString("hex")}`;
-  await sql`insert into users (id, email, name, initials, role, password_hash, title)
+  await sql`insert into users (id, email, name, initials, role, password_hash, title, privacy_accepted_at)
     values (${id}, ${input.email.trim().toLowerCase()}, ${input.name.trim()}, ${initialsOf(input.name, input.role === "trainer" ? "TR" : "RC")}, ${input.role},
-      ${input.password ? hashPassword(input.password) : null}, ${input.title ?? null})`;
+      ${input.password ? hashPassword(input.password) : null}, ${input.title ?? null}, ${input.privacyAccepted ? sql`now()` : null})`;
   return id;
 }
 
@@ -63,10 +85,11 @@ export async function emailTaken(email: string) {
   return !!(await byEmail(email));
 }
 
-/** Deactivating also bumps the session version, which signs the person out everywhere. */
+/** Deactivating also bumps the session version, which signs the person out everywhere. Admins can be deactivated too, never the last active one. */
 export async function setUserActive(id: string, active: boolean) {
   const sql = await db();
-  const [row] = await sql<{name: string}[]>`update users set active = ${active}, session_version = session_version + 1 where id = ${id} and role <> 'admin' returning name`;
+  const [row] = await sql<{name: string}[]>`update users set active = ${active}, session_version = session_version + 1 where id = ${id}
+    and (${active} or role <> 'admin' or (select count(*) from users where role = 'admin' and active and id <> ${id}) > 0) returning name`;
   return row?.name ?? null;
 }
 

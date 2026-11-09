@@ -61,6 +61,8 @@ const schema = `
     data jsonb not null,
     updated_at timestamptz not null default now()
   );
+  -- Bumped when the admin corrects a member's log, so a member's open app can't save over the correction.
+  alter table member_state add column if not exists revision integer not null default 0;
   create table if not exists member_history (
     user_id text not null references users(id) on delete cascade,
     period text not null check (period in ('day', 'week')),
@@ -115,6 +117,18 @@ const schema = `
     created_at timestamptz not null default now(),
     primary key (client_id, day)
   );
+  -- One-time links for password resets and invitations. Only a SHA-256 hash of the token is stored.
+  create table if not exists password_tokens (
+    token_hash text primary key,
+    user_id text not null references users(id) on delete cascade,
+    purpose text not null check (purpose in ('reset', 'invite')),
+    expires_at timestamptz not null,
+    used_at timestamptz,
+    created_at timestamptz not null default now()
+  );
+  create index if not exists password_tokens_user_idx on password_tokens (user_id);
+  -- When the person accepted the privacy policy (self-registration, or setting a password from an invitation).
+  alter table users add column if not exists privacy_accepted_at timestamptz;
   create table if not exists login_attempts (
     key text primary key,
     count integer not null,

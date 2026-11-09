@@ -1,6 +1,8 @@
 import {NextResponse, type NextRequest} from "next/server";
 import {SESSION_COOKIE, decrypt} from "@/lib/session";
 import {roleArea, roleHome} from "@/lib/roles";
+import {daySlugs, planningWeeks} from "@/lib/schedule";
+import {istToday} from "@/lib/dates";
 
 /* Early redirects only. Protected layouts re-check the session on the server (lib/dal.ts). */
 export async function proxy(request: NextRequest) {
@@ -18,6 +20,13 @@ export async function proxy(request: NextRequest) {
   if (pathname === "/onboarding" && session.role === "member") return NextResponse.next();
   if (!pathname.startsWith(roleArea[session.role])) {
     return NextResponse.redirect(new URL(roleHome[session.role], request.url));
+  }
+  // An unknown week or day is a real 404. The member pages stream a loading screen (status 200) before
+  // the page itself can call notFound(), so the check has to happen here, before rendering starts.
+  const dayPage = /^\/(?:trainer|admin)\/clients\/[^/]+\/workouts\/([^/]+)\/([^/]+)\/?$/.exec(pathname);
+  if (dayPage) {
+    const weeks = planningWeeks(istToday().weekStart).map(w => w.start);
+    if (!weeks.includes(dayPage[1]) || !daySlugs.includes(dayPage[2])) return NextResponse.rewrite(new URL(`${roleArea[session.role]}/__not-found`, request.url));
   }
   return NextResponse.next();
 }

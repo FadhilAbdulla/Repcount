@@ -11,7 +11,8 @@
     "start": "next start",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "test": "next build && node --test tests/rendered-html.test.mjs"
+    "test": "next build && node --test tests/rendered-html.test.mjs",
+    "backup": "bash scripts/backup.sh"
   },
   "dependencies": {
     "jose": "6.2.13",

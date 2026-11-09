@@ -1,7 +1,7 @@
 import "server-only";
 import type postgres from "postgres";
 import {db} from "./db";
-import {rollOver, sanitizeMemberState, type MemberState} from "./memberState";
+import {rollOver, sanitizeMemberState, type MemberState, type Point} from "./memberState";
 import {istToday} from "./dates";
 import {listTrainers, type Trainer} from "./users";
 import type {PlannedWorkout, WeekPlan} from "./schedule";
@@ -187,18 +187,23 @@ export async function trainerAnalytics(): Promise<TrainerStats[]> {
   });
 }
 
-/** Admin edit of a member's name, contact, goal and biodata. The name is copied to their sign-in so it matches everywhere. */
-export async function updateClientDetails(id: string, input: {name: string; initials: string; phone: string | null; goal: string; bio: Bio}) {
+/**
+ * Admin edit of a member's name, contact, goal, training preferences and biodata.
+ * The name and email are copied to their sign-in so they match everywhere. A null intake leaves the onboarding answers untouched.
+ */
+export async function updateClientDetails(id: string, input: {name: string; initials: string; email: string | null; phone: string | null; goal: string; intake: Intake | null; bio: Bio}) {
   const sql = await db();
   await sql.begin(async tx => {
-    const [row] = await tx<{user_id: string | null}[]>`update clients set name = ${input.name}, initials = ${input.initials}, phone = ${input.phone}, goal = ${input.goal},
+    const [row] = await tx<{user_id: string | null}[]>`update clients set name = ${input.name}, initials = ${input.initials}, email = ${input.email}, phone = ${input.phone}, goal = ${input.goal},
+      ${input.intake ? tx`intake = ${tx.json(input.intake)},` : tx``}
       bio = ${tx.json(input.bio as unknown as postgres.JSONValue)} where id = ${id} returning user_id`;
-    if (row?.user_id) await tx`update users set name = ${input.name}, initials = ${input.initials} where id = ${row.user_id}`;
+    if (row?.user_id) await tx`update users set name = ${input.name}, initials = ${input.initials} ${input.email ? tx`, email = ${input.email}` : tx``} where id = ${row.user_id}`;
   });
 }
 
 export type PastWeek = {weekStart: string; workoutsDone: number; checkin: string | null};
-export type Message = {body: string; at: string; author: string};
+/** One message in a member's conversation with their trainer; `fromMember` is false for trainer and admin replies. */
+export type Message = {id: number; body: string; at: string; author: string; fromMember: boolean};
 export type ClientDetail = {client: ClientRow; state: MemberState | null; history: AuditEntry[]; lastSaved: string | null; plan: WeekPlan | null; pastWeeks: PastWeek[]; messages: Message[]};
 
 /** Everything staff can see about one client: record, saved member progress, past weeks and action history. */
@@ -231,18 +236,21 @@ export async function getMemberState(userId: string): Promise<MemberState> {
   return rollOver(sanitizeMemberState(row?.data ?? null, day, weekStart), day, weekStart);
 }
 
-/** A member's question for their trainer. */
+/** A member's question, or a trainer's or admin's reply. */
 export async function addMessage(clientId: string, authorId: string, body: string) {
   const sql = await db();
   await sql`insert into messages (client_id, author_id, body) values (${clientId}, ${authorId}, ${body})`;
 }
 
-export async function listMessages(clientId: string, limit = 20): Promise<Message[]> {
+/** The latest messages, oldest first. */
+export async function listMessages(clientId: string, limit = 30): Promise<Message[]> {
   const sql = await db();
   const rows = await sql<Message[]>`
-    select m.body, to_char(m.created_at at time zone 'UTC', 'YYYY-MM-DD HH24:MI:SS') as at, coalesce(u.name, m.author_id) as author
-    from messages m left join users u on u.id = m.author_id where m.client_id = ${clientId} order by m.id desc limit ${limit}`;
-  return rows.map(({body, at, author}) => ({body, at, author}));
+    select m.id::int as id, m.body, to_char(m.created_at at time zone 'UTC', 'YYYY-MM-DD HH24:MI:SS') as at, coalesce(u.name, m.author_id) as author,
+      m.author_id = c.user_id as "fromMember"
+    from messages m join clients c on c.id = m.client_id left join users u on u.id = m.author_id
+    where m.client_id = ${clientId} order by m.id desc limit ${limit}`;
+  return rows.map(({id, body, at, author, fromMember}) => ({id, body, at, author, fromMember: !!fromMember})).reverse();
 }
 
 /** One archived day of a member's daily tracker. */
@@ -264,15 +272,20 @@ const isoDate = /^\d{4}-\d{2}-\d{2}$/;
  * Saves a member's progress for today (India time, decided by the server) and mirrors what staff need onto their client record.
  * The previous day's tracker and the previous week's full state are archived to member_history before being replaced.
  */
-export async function saveMemberState(userId: string, input: unknown) {
+/**
+ * Saves the member's app state. `revision` is the one their app loaded: if the admin has corrected the log since,
+ * the save is refused ({stale: true}) so the app reloads instead of writing over the correction.
+ */
+export async function saveMemberState(userId: string, input: unknown, revision?: number): Promise<{stale: boolean}> {
   const sql = await db();
   const {day, weekStart} = istToday();
   const sanitized = sanitizeMemberState(input, day, weekStart);
   // A tab left open overnight sends yesterday's state: start it fresh rather than filing it under today.
   const state = {...rollOver(sanitized, day, weekStart), day, weekStart};
 
-  await sql.begin(async tx => {
-    const [previousRow] = await tx<{data: unknown}[]>`select data from member_state where user_id = ${userId} for update`;
+  return sql.begin(async tx => {
+    const [previousRow] = await tx<{data: unknown; revision: number}[]>`select data, revision from member_state where user_id = ${userId} for update`;
+    if (previousRow && typeof revision === "number" && previousRow.revision > revision) return {stale: true};
     const before = previousRow ? sanitizeMemberState(previousRow.data, day, weekStart) : null;
     if (before && isoDate.test(before.day) && before.day !== day) {
       await tx`insert into member_history (user_id, period, period_start, data) values (${userId}, 'day', ${before.day}, ${tx.json(before.tracker as unknown as postgres.JSONValue)})
@@ -286,7 +299,7 @@ export async function saveMemberState(userId: string, input: unknown) {
       on conflict (user_id) do update set data = excluded.data, updated_at = excluded.updated_at`;
 
     const [client] = await tx<{id: string}[]>`select id from clients where user_id = ${userId}`;
-    if (!client) return;
+    if (!client) return {stale: false};
     // Progress is completed ÷ planned workouts in the trainer's schedule; without a schedule there is nothing to measure.
     const {progress, trainedToday} = await weekProgress(tx, client.id, state.workout.completedDays, day, weekStart);
     await tx`update clients set progress = ${progress}, next_checkin = ${state.booking ?? "Not booked"},
@@ -299,7 +312,100 @@ export async function saveMemberState(userId: string, input: unknown) {
     if (state.payment.submitted && (!before?.payment.submitted || before.payment.reference !== state.payment.reference)) {
       await tx`update clients set payment_reference = ${state.payment.reference} where id = ${client.id}`;
     }
+    return {stale: false};
   });
+}
+
+/** The revision of the member's saved state; their app sends it back with each save. */
+export async function getMemberRevision(userId: string) {
+  const sql = await db();
+  const [row] = await sql<{revision: number}[]>`select revision from member_state where user_id = ${userId}`;
+  return row?.revision ?? 0;
+}
+
+/** What the admin can correct in a member's own log: weigh-ins, body-fat estimates, today's tracker and this week's check-in. */
+export type MemberLog = {weights: Point[]; fats: Point[]; water: number; steps: number; sleep: number | null; mood: string | null; checkinSubmitted: boolean};
+
+export async function getMemberLog(clientId: string): Promise<MemberLog | null> {
+  const client = await getClient(clientId);
+  if (!client?.userId) return null;
+  const t = (await getMemberState(client.userId));
+  return {weights: t.tracker.weights, fats: t.tracker.fats, water: t.tracker.water, steps: t.tracker.steps, sleep: t.tracker.sleep, mood: t.tracker.mood, checkinSubmitted: t.checkin.submitted};
+}
+
+/** Applies an admin change to a member's saved state and bumps its revision (see saveMemberState). */
+async function patchMemberState(tx: postgres.TransactionSql, userId: string, change: (state: MemberState) => void) {
+  const {day, weekStart} = istToday();
+  const [row] = await tx<{data: unknown}[]>`select data from member_state where user_id = ${userId} for update`;
+  const state = rollOver(sanitizeMemberState(row?.data ?? null, day, weekStart), day, weekStart);
+  change(state);
+  const clean = sanitizeMemberState(state, day, weekStart);
+  await tx`insert into member_state (user_id, data, updated_at, revision) values (${userId}, ${tx.json(clean as unknown as postgres.JSONValue)}, now(), 1)
+    on conflict (user_id) do update set data = excluded.data, updated_at = now(), revision = member_state.revision + 1`;
+}
+
+/** Admin correction of a member's log. Reopening the check-in clears the "Check-in due" note. */
+export async function updateMemberLog(clientId: string, log: MemberLog) {
+  const client = await getClient(clientId);
+  if (!client?.userId) return false;
+  const sql = await db();
+  await sql.begin(async tx => {
+    await patchMemberState(tx, client.userId!, s => {
+      s.tracker.weights = log.weights; s.tracker.fats = log.fats;
+      s.tracker.water = log.water; s.tracker.steps = log.steps; s.tracker.sleep = log.sleep; s.tracker.mood = log.mood;
+      if (!log.checkinSubmitted) s.checkin.submitted = false;
+    });
+    if (!log.checkinSubmitted) await tx`update clients set checkin_note = null, stage = case when stage = 'Check-in due' then 'Active' else stage end where id = ${clientId}`;
+  });
+  return true;
+}
+
+/** Admin edit of membership facts: payment status and reference, join date and the next check-in. Kept in step with the member's app. */
+export async function updateMembership(clientId: string, input: {paid: boolean; reference: string | null; joinedOn: string | null; nextCheckIn: string}) {
+  const client = await getClient(clientId);
+  if (!client) return false;
+  const sql = await db();
+  await sql.begin(async tx => {
+    await tx`update clients set paid = ${input.paid}, payment_reference = ${input.reference}, joined_on = ${input.joinedOn}, next_checkin = ${input.nextCheckIn},
+      stage = case when ${input.paid} and stage = 'Payment review' then 'Onboarding' when not ${input.paid} and stage <> 'Payment review' then 'Payment review' else stage end
+      where id = ${clientId}`;
+    if (client.userId) await patchMemberState(tx, client.userId, s => {
+      s.payment = {submitted: !!input.reference, reference: input.reference ?? ""};
+      s.booking = input.nextCheckIn === "Not booked" || input.nextCheckIn === "—" ? null : input.nextCheckIn;
+    });
+  });
+  return true;
+}
+
+/**
+ * Permanently deletes a client: their sign-in, saved progress, history, plans, messages and links. The audit trail keeps
+ * a record that it happened but the client's name and details are removed from it.
+ */
+export async function deleteClient(clientId: string) {
+  const sql = await db();
+  return sql.begin(async tx => {
+    const [row] = await tx<{user_id: string | null; name: string}[]>`delete from clients where id = ${clientId} returning user_id, name`;
+    if (!row) return null;
+    if (row.user_id) await tx`delete from users where id = ${row.user_id} and role = 'member'`;
+    await tx`update audit_log set detail = 'Deleted client' where subject_id = ${clientId} or subject_id = ${row.user_id ?? clientId}`;
+    return row.name;
+  });
+}
+
+/** Permanently deletes a trainer's account. Their members become unassigned; plans they wrote stay with the members. */
+export async function deleteTrainer(userId: string) {
+  const sql = await db();
+  return sql.begin(async tx => {
+    await tx`update clients set trainer_id = null where trainer_id = ${userId}`;
+    const [row] = await tx<{name: string}[]>`delete from users where id = ${userId} and role = 'trainer' returning name`;
+    return row?.name ?? null;
+  });
+}
+
+export async function deleteMessage(clientId: string, messageId: number) {
+  const sql = await db();
+  const rows = await sql`delete from messages where id = ${messageId} and client_id = ${clientId} returning id`;
+  return rows.length > 0;
 }
 
 type RawPlan = {day: number; title: string; exercises: string; start_time: string | null; duration_min: number | null; meeting_url: string | null};

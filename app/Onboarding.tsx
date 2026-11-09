@@ -30,7 +30,7 @@ export default function Onboarding({firstName, goal}: {firstName: string; goal?:
     <form className="rc-onb" action={action}>
       {(Object.keys(answers) as Answer[]).map(k => answers[k] && <input key={k} type="hidden" name={k} value={answers[k]}/>)}
       <p className="rc-onb-eyebrow">{review ? "Your starting point" : `Your starting point · 0${step + 1} / 03`}</p>
-      <div className="rc-onb-progress" aria-hidden="true"><i style={{width: `${(step + 1) * 25}%`}}/></div>
+      <div className="rc-onb-progress" aria-hidden="true"><i style={{width: `${Math.min(100, Math.round(((step + 1) / steps.length) * 100))}%`}}/></div>
       <h1 id="auth-heading" tabIndex={-1} ref={heading}>{review ? <>Nice to meet you, <em>{firstName}.</em></> : current.title}</h1>
       {state?.error && <div className="rc-login-error" role="alert">{state.error}</div>}
 

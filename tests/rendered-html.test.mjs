@@ -4,6 +4,8 @@ import { spawn } from 'node:child_process';
 import { createServer } from 'node:net';
 import { SignJWT } from 'jose';
 import postgres from 'postgres';
+import { readFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 
 // Runs against `next start` on a free port, so the proxy, layouts and server actions are exercised for real.
 const SESSION_SECRET = 'test-secret-'.padEnd(48, 'x');
@@ -123,7 +125,7 @@ test('each role reaches only its own dashboard', async () => {
  const admin = await sessionCookie('u-admin', 'admin');
  const page = await visit('/member/overview', member);
  assert.equal(page.status, 200);
- assert.match(readableText(await page.text()), /Aarav Sharma/);
+ assert.match(readableText(await page.text()), /Let’s train, Aarav\./);
  assert.equal((await visit('/admin', member)).headers.get('location')?.endsWith('/member/overview'), true);
  assert.equal((await visit('/member/plan', trainer)).headers.get('location')?.endsWith('/trainer'), true);
  assert.match(readableText(await (await visit('/trainer', trainer)).text()), /TRAINER WORKSPACE/);
@@ -232,7 +234,7 @@ test('admins see member IDs, profile status and editable trainers', async () => 
  assert.match(roster, /Profile incomplete|No plan this week|workouts/);
  const team = readableText(await (await visit('/admin?tab=trainers', admin)).text());
  assert.match(team, /Add trainer/);
- assert.match(team, /Edit name & title/);
+ assert.match(team, /Edit details/);
  assert.doesNotMatch(team, /capacity/i, 'Trainers no longer have a client capacity');
  const detail = readableText(await (await visit('/admin/clients/c-aarav', admin)).text());
  assert.match(detail, /Edit details/);
@@ -286,11 +288,13 @@ test('visitors register, answer the onboarding questions, and staff see their an
  const page = await visit('/register');
  assert.equal(page.status, 200);
  const html = await page.text();
- for (const name of ['name', 'email', 'password', 'adult']) assert.match(html, new RegExp(`name="${name}"`), name);
+ for (const name of ['name', 'email', 'password', 'adult', 'privacy']) assert.match(html, new RegExp(`name="${name}"`), name);
  const fields = {name: 'Lina Haddad', email: 'lina@example.com', phone: '+971 50 000 0000', password: 'LinaPass#2026'};
  const refused = await submitForm('/register', fields);
  assert.equal(refused.headers.get('set-cookie')?.includes('rc_session='), undefined, 'The adult confirmation is required');
- const created = await submitForm('/register', {...fields, adult: 'on'});
+ const noConsent = await submitForm('/register', {...fields, adult: 'on'}, '10.20.30.42');
+ assert.match(await noConsent.text(), /accept the privacy policy/, 'Privacy consent is required');
+ const created = await submitForm('/register', {...fields, adult: 'on', privacy: 'on'});
  const cookie = (created.headers.get('set-cookie') ?? '').match(/rc_session=[^;]+/)?.[0];
  assert.ok(cookie, 'Registration signs the member in');
  assert.match(created.headers.get('location') ?? created.headers.get('x-action-redirect') ?? '', /\/onboarding/);
@@ -309,7 +313,9 @@ test('visitors register, answer the onboarding questions, and staff see their an
  assert.match((await visit('/onboarding', cookie)).headers.get('location') ?? '', /\/member\/overview$/, 'Onboarding is asked once');
  const detail = readableText(await (await visit(`/admin/clients/${client.id}`, await sessionCookie('u-admin', 'admin'))).text());
  assert.match(detail, /At a gym · 2 days a week/);
- const again = await submitForm('/register', {...fields, adult: 'on'}, '10.20.30.41');
+ const [{privacy_accepted_at: consented}] = await sql`select privacy_accepted_at from users where email = 'lina@example.com'`;
+ assert.ok(consented, 'Consent time is recorded');
+ const again = await submitForm('/register', {...fields, adult: 'on', privacy: 'on'}, '10.20.30.41');
  assert.match(await again.text(), /already exists/);
  assert.match((await visit('/register', await sessionCookie('u-member-aarav', 'member'))).headers.get('location') ?? '', /\/member\/overview$/);
 });
@@ -324,4 +330,326 @@ test('members without a schedule see no invented workouts', async () => {
   const text = readableText(await (await visit(path, member)).text()).replace(/\S+@\S+/g, '');
   assert.doesNotMatch(text, /\b(?:demo|sample|preview|illustrative)\b/i, path);
  }
+});
+
+/* ---- Server actions called the way the browser calls them: POST with the action's id from the build manifest. ---- */
+let actionIds;
+async function callAction(file, name, args, cookie, path = '/') {
+ actionIds ??= JSON.parse(readFileSync('.next/server/server-reference-manifest.json', 'utf8')).node;
+ const id = Object.entries(actionIds).find(([, a]) => a.filename === file && a.exportedName === name)?.[0];
+ assert.ok(id, `No server action ${name} in ${file}`);
+ const response = await fetch(baseUrl + path, {method: 'POST', redirect: 'manual', body: JSON.stringify(args),
+  headers: {'next-action': id, 'content-type': 'text/plain;charset=UTF-8', accept: 'text/x-component', origin: baseUrl, cookie}});
+ // The RSC payload carries the returned {ok} / {error} object as JSON on one of its lines.
+ const text = await response.text();
+ const line = text.split('\n').map(l => l.replace(/^[0-9a-f]+:/, '')).find(l => /^\{"(?:ok|error|stale)"/.test(l));
+ return line ? JSON.parse(line) : {raw: text, status: response.status};
+}
+const currentCookie = async (userId, role) => {
+ const [{session_version: v}] = await sql`select session_version from users where id = ${userId}`;
+ return sessionCookie(userId, role, SESSION_SECRET, v);
+};
+const tokenFrom = message => message.match(/\/reset-password\?token=([\w-]+)/)?.[1];
+
+test('the admin edits a trainer’s email, title and password; a new password ends old sessions', async () => {
+ const admin = await sessionCookie('u-admin', 'admin');
+ const oldTrainer = await currentCookie('u-trainer-2', 'trainer');
+ const taken = await callAction('app/actions/data.ts', 'editTrainer', ['u-trainer-2', {name: 'Trainer 2', email: 'trainer@repcount.demo', title: 'Coach', password: ''}], admin, '/admin');
+ assert.match(taken.error ?? '', /already signs in with that email/);
+ assert.match((await callAction('app/actions/data.ts', 'editTrainer', ['u-trainer-2', {name: 'Trainer 2', email: 'bad', title: '', password: ''}], admin, '/admin')).error ?? '', /valid email/);
+ assert.match((await callAction('app/actions/data.ts', 'editTrainer', ['u-trainer-2', {name: 'Trainer 2', email: 'coach2@example.com', title: '', password: 'short'}], admin, '/admin')).error ?? '', /at least 10/);
+ const saved = await callAction('app/actions/data.ts', 'editTrainer', ['u-trainer-2', {name: 'Sam Coach', email: 'Coach2@Example.com', title: 'Strength coach', password: 'NewCoach#2026'}], admin, '/admin');
+ assert.match(saved.ok ?? JSON.stringify(saved), /details saved/);
+ const [row] = await sql`select name, email, title, session_version from users where id = 'u-trainer-2'`;
+ assert.deepEqual({name: row.name, email: row.email, title: row.title}, {name: 'Sam Coach', email: 'coach2@example.com', title: 'Strength coach'});
+ assert.match((await visit('/trainer', oldTrainer)).headers.get('location') ?? '', /\/login$/, 'The old session is signed out');
+ const signedIn = await submitForm('/login', {email: 'coach2@example.com', password: 'NewCoach#2026'}, '10.9.9.1');
+ assert.match(signedIn.headers.get('location') ?? '', /\/trainer$/, 'The new email and password sign in');
+ const old = await submitForm('/login', {email: 'trainer2@repcount.demo', password: 'Trainer2#2026'}, '10.9.9.2');
+ assert.match(await old.text(), /don’t match an account/, 'The old email no longer works');
+ // Only an admin may edit trainers.
+ assert.equal((await callAction('app/actions/data.ts', 'editTrainer', ['u-trainer-akif', {name: 'X', email: 'x@example.com', title: '', password: ''}], await sessionCookie('u-trainer-akif', 'trainer'), '/admin')).ok, undefined);
+ const [akif] = await sql`select email from users where id = 'u-trainer-akif'`;
+ assert.equal(akif.email, 'trainer@repcount.demo');
+});
+
+test('the admin edits a member’s email, training space and rhythm', async () => {
+ const admin = await sessionCookie('u-admin', 'admin');
+ const base = {name: 'Kabir Mehta', email: 'member2@repcount.demo', phone: '', goal: 'Lose body fat', dob: '', gender: '', heightCm: ''};
+ const partial = await callAction('app/actions/data.ts', 'editClientDetails', ['c-kabir', {...base, place: 'At a gym', days: ''}], admin, '/admin/clients/c-kabir');
+ assert.match(partial.error ?? '', /both where they train and how often/);
+ const clash = await callAction('app/actions/data.ts', 'editClientDetails', ['c-kabir', {...base, email: 'member@repcount.demo', place: '', days: ''}], admin, '/admin/clients/c-kabir');
+ assert.match(clash.error ?? '', /already signs in/);
+ const saved = await callAction('app/actions/data.ts', 'editClientDetails', ['c-kabir', {...base, email: 'kabir@example.com', place: 'A mix of both', days: '4 days a week'}], admin, '/admin/clients/c-kabir');
+ assert.match(saved.ok ?? JSON.stringify(saved), /details saved/);
+ const [c] = await sql`select c.email, c.intake, u.email as login from clients c join users u on u.id = c.user_id where c.id = 'c-kabir'`;
+ assert.deepEqual(c.intake, {place: 'A mix of both', days: '4 days a week'});
+ assert.equal(c.email, 'kabir@example.com');
+ assert.equal(c.login, 'kabir@example.com', 'The sign-in email changes too');
+ assert.match(readableText(await (await visit('/admin/clients/c-kabir', admin)).text()), /A mix of both · 4 days a week/);
+ // Leaving both blank keeps the member's own onboarding answers.
+ await callAction('app/actions/data.ts', 'editClientDetails', ['c-kabir', {...base, email: 'kabir@example.com', place: '', days: ''}], admin, '/admin/clients/c-kabir');
+ assert.deepEqual((await sql`select intake from clients where id = 'c-kabir'`)[0].intake, {place: 'A mix of both', days: '4 days a week'});
+});
+
+test('onboarding progress fills a third per question', async () => {
+ await sql`insert into users (id, email, name, initials, role) values ('u-member-onb', 'onb@example.com', 'Omar B', 'OB', 'member')`;
+ await sql`insert into clients (id, user_id, name, initials, stage, goal) values ('c-onb', 'u-member-onb', 'Omar B', 'OB', 'Payment review', '')`;
+ const html = await (await visit('/onboarding', await sessionCookie('u-member-onb', 'member'))).text();
+ assert.match(html, /rc-onb-progress[^>]*><i style="width:33%"/);
+ assert.match(html, /0?1 \/ 03/);
+});
+
+test('the trainer’s week planner shows the member’s preferred rhythm', async () => {
+ const akif = await sessionCookie('u-trainer-akif', 'trainer');
+ await sql`update clients set intake = ${sql.json({place: 'At home', days: '2 days a week'})} where id = 'c-aarav'`;
+ const text = readableText(await (await visit('/trainer/clients/c-aarav/workouts', akif)).text());
+ assert.match(text, /Aarav prefers 2 days a week · at home\s*\./);
+ // The earlier schedule test planned 7 workouts this week, so the mismatch is pointed out.
+ assert.match(text, /This week has 7 workout\s*s\s*\. Worth agreeing the rhythm together\./);
+});
+
+test('unknown weeks and days of the planner are real 404s', async () => {
+ const akif = await sessionCookie('u-trainer-akif', 'trainer');
+ for (const path of ['/trainer/clients/c-aarav/workouts/2001-01-01/monday', `/trainer/clients/c-aarav/workouts/${istWeekStart()}/funday`]) {
+  assert.equal((await visit(path, akif)).status, 404, path);
+ }
+});
+
+test('forgot password sends the same reply for any email and stores only a hashed link', async () => {
+ const login = await (await visit('/login')).text();
+ assert.match(login, /href="\/forgot-password"/, 'Forgot? links to the reset page');
+ const page = await visit('/forgot-password');
+ assert.equal(page.status, 200);
+ const known = readableText(await (await submitForm('/forgot-password', {email: 'member@repcount.demo'}, '10.7.0.1')).text());
+ const unknown = readableText(await (await submitForm('/forgot-password', {email: 'nobody@example.com'}, '10.7.0.2')).text());
+ assert.match(known, /Check your inbox/);
+ assert.match(unknown, /Check your inbox/, 'No hint whether the account exists');
+ const tokens = await sql`select t.token_hash, t.purpose, t.expires_at - now() as ttl from password_tokens t join users u on u.id = t.user_id where u.email = 'member@repcount.demo'`;
+ assert.equal(tokens.length, 1);
+ assert.equal(tokens[0].purpose, 'reset');
+ assert.match(tokens[0].token_hash, /^[0-9a-f]{64}$/);
+ for (let i = 0; i < 3; i++) await submitForm('/forgot-password', {email: 'limit@example.com'}, '10.7.0.3');
+ assert.match(readableText(await (await submitForm('/forgot-password', {email: 'limit@example.com'}, '10.7.0.3')).text()), /Too many reset requests/);
+});
+
+test('a reset link sets a new password once, needs consent and signs out old sessions', async () => {
+ const admin = await sessionCookie('u-admin', 'admin');
+ const oldSession = await currentCookie('u-member-onb', 'member');
+ await sql`update users set password_hash = null where id = 'u-member-onb'`;
+ const sent = await callAction('app/actions/data.ts', 'sendResetLink', ['u-member-onb', 'c-onb'], admin, '/admin/clients/c-onb');
+ assert.match(sent.ok ?? JSON.stringify(sent), /Email isn’t set up/, 'Without email, the admin gets the link to pass on');
+ const token = tokenFrom(sent.ok);
+ assert.ok(token);
+ assert.equal((await sql`select count(*)::int as n from password_tokens where token_hash = ${createHash('sha256').update(token).digest('hex')}`)[0].n, 1, 'Stored hashed');
+ const path = `/reset-password?token=${token}`;
+ assert.match(readableText(await (await visit(path)).text()), /Choose a new password/);
+ assert.match(readableText(await (await submitForm(path, {password: 'OmarPass#2026', confirm: 'Different#2026', privacy: 'on'})).text()), /don’t match/);
+ assert.match(readableText(await (await submitForm(path, {password: 'OmarPass#2026', confirm: 'OmarPass#2026'})).text()), /accept the privacy policy/);
+ const done = await submitForm(path, {password: 'OmarPass#2026', confirm: 'OmarPass#2026', privacy: 'on'});
+ assert.match(done.headers.get('location') ?? '', /\/login\?notice=password_set$/);
+ assert.match(readableText(await (await visit('/login?notice=password_set')).text()), /Your password is saved/);
+ assert.match((await visit('/onboarding', oldSession)).headers.get('location') ?? '', /\/login$/, 'Old sessions are signed out');
+ assert.match((await submitForm('/login', {email: 'onb@example.com', password: 'OmarPass#2026'}, '10.7.1.1')).headers.get('location') ?? '', /\/member\/overview$/);
+ assert.match(readableText(await (await visit(path)).text()), /This link has expired/, 'A link works only once');
+ assert.match(readableText(await (await visit('/reset-password?token=not-a-real-token-at-all-123')).text()), /This link has expired/);
+ // Expired links are refused too.
+ const fresh = tokenFrom((await callAction('app/actions/data.ts', 'sendResetLink', ['u-member-onb'], admin, '/admin')).ok);
+ await sql`update password_tokens set expires_at = now() - interval '1 minute' where token_hash = ${createHash('sha256').update(fresh).digest('hex')}`;
+ assert.match(readableText(await (await visit(`/reset-password?token=${fresh}`)).text()), /This link has expired/);
+ // Only an admin can issue a reset link.
+ const aaravLinks = async () => (await sql`select count(*)::int as n from password_tokens where user_id = 'u-member-aarav'`)[0].n;
+ const before = await aaravLinks();
+ assert.equal((await callAction('app/actions/data.ts', 'sendResetLink', ['u-member-aarav'], await sessionCookie('u-trainer-akif', 'trainer'), '/admin')).ok, undefined);
+ assert.equal(await aaravLinks(), before, 'No link was issued');
+});
+
+test('people the admin adds without a password get an invitation link', async () => {
+ const admin = await sessionCookie('u-admin', 'admin');
+ const added = await callAction('app/actions/data.ts', 'addTrainer', [{name: 'Nora Lane', email: 'nora@example.com', title: 'Trainer', password: ''}], admin, '/admin');
+ assert.match(added.ok ?? JSON.stringify(added), /invitation link/);
+ const page = readableText(await (await visit(`/reset-password?token=${tokenFrom(added.ok)}`)).text());
+ assert.match(page, /Welcome, Nora\s*\./);
+ assert.match(page, /privacy policy/);
+ const [{purpose}] = await sql`select t.purpose from password_tokens t join users u on u.id = t.user_id where u.email = 'nora@example.com'`;
+ assert.equal(purpose, 'invite');
+ const member = await callAction('app/actions/data.ts', 'addClient', [{name: 'Ivy Park', email: 'ivy@example.com', phone: '', goal: '', trainerId: '', password: ''}], admin, '/admin');
+ assert.match(member.ok ?? JSON.stringify(member), /invitation link/);
+ const withPassword = await callAction('app/actions/data.ts', 'addClient', [{name: 'Ravi Das', email: 'ravi@example.com', phone: '', goal: '', trainerId: '', password: 'RaviPass#2026'}], admin, '/admin');
+ assert.doesNotMatch(withPassword.ok ?? '', /invitation/, 'No invitation when the admin sets a password');
+});
+
+test('trainers reply to members’ questions and members see the conversation', async () => {
+ const aarav = await currentCookie('u-member-aarav', 'member');
+ const asked = await callAction('app/actions/data.ts', 'askCoach', ['Can I swap squats for lunges?'], aarav, '/member/profile');
+ assert.match(asked.ok ?? JSON.stringify(asked), /Profile/);
+ const akif = await sessionCookie('u-trainer-akif', 'trainer');
+ const staffView = readableText(await (await visit('/trainer/clients/c-aarav', akif)).text());
+ assert.match(staffView, /Messages with Aarav/);
+ assert.match(staffView, /Can I swap squats for lunges\?/);
+ assert.match(staffView, /Reply to Aarav/);
+ assert.match((await callAction('app/actions/data.ts', 'replyToMember', ['c-aarav', ' '], akif, '/trainer/clients/c-aarav')).error ?? '', /Write your reply/);
+ const replied = await callAction('app/actions/data.ts', 'replyToMember', ['c-aarav', 'Yes, reverse lunges, 3 × 8 each leg.'], akif, '/trainer/clients/c-aarav');
+ assert.match(replied.ok ?? JSON.stringify(replied), /Reply sent/);
+ // A trainer can't reply to someone else's member; a member can't use the staff reply at all.
+ const other = await currentCookie('u-trainer-2', 'trainer');
+ const otherReply = await callAction('app/actions/data.ts', 'replyToMember', ['c-aarav', 'Hello'], other, '/trainer/clients/c-aarav');
+ assert.match(otherReply.error ?? JSON.stringify(otherReply), /isn’t assigned to you/);
+ assert.equal((await callAction('app/actions/data.ts', 'replyToMember', ['c-aarav', 'Hello'], aarav, '/member/profile')).ok, undefined);
+ const profile = readableText(await (await visit('/member/profile', aarav)).text());
+ assert.match(profile, /Messages with Akif/);
+ assert.match(profile, /Can I swap squats for lunges\?.*Yes, reverse lunges, 3 × 8 each leg\./, 'Oldest first');
+ const counts = await sql`select author_id, count(*)::int as n from messages where client_id = 'c-aarav' group by author_id order by author_id`;
+ assert.deepEqual(counts.map(r => [r.author_id, r.n]), [['u-member-aarav', 1], ['u-trainer-akif', 1]], 'Only the assigned trainer’s reply was stored');
+});
+
+test('the privacy policy is public and linked from sign-up and the footer', async () => {
+ const page = await visit('/privacy');
+ assert.equal(page.status, 200);
+ const text = readableText(await page.text());
+ assert.match(text, /Privacy policy/);
+ assert.match(text, /What we collect/);
+ assert.match(text, /Who can see it/);
+ assert.match(text, /delete/);
+ assert.match(await (await visit('/register')).text(), /href="\/privacy"/);
+ assert.match(await productionHomepage(), /href="\/privacy"/);
+});
+
+/* ---- The admin can manage and edit every record ---- */
+
+test('the admin plans workouts, call links, sessions and nutrition for any client', async () => {
+ const admin = await sessionCookie('u-admin', 'admin');
+ const week = istWeekStart();
+ const workouts = readableText(await (await visit('/admin/clients/c-riya/workouts', admin)).text());
+ assert.match(workouts, /Riya\s*’s week/);
+ assert.equal((await visit(`/admin/clients/c-riya/workouts/${week}/funday`, admin)).status, 404);
+ assert.match(readableText(await (await visit(`/admin/clients/c-riya/workouts/${week}/monday`, admin)).text()), /Save Monday/);
+ const plan = [{title: 'Mobility & stretch', exercises: ['Cat-cow · 1 min'], time: '07:00', durationMin: 20, meetingUrl: 'https://meet.google.com/aaa-bbbb-ccc'}, null, null, null, null, null, null];
+ const saved = await callAction('app/actions/data.ts', 'saveSchedule', ['c-riya', week, plan], admin, `/admin/clients/c-riya/workouts/${week}/monday`);
+ assert.match(saved.ok ?? JSON.stringify(saved), /1 workout scheduled/);
+ assert.equal((await sql`select count(*)::int as n from workout_plans where client_id = 'c-riya' and week_start = ${week}`)[0].n, 1);
+ const link = await callAction('app/actions/data.ts', 'saveMeetingLink', ['c-riya', 'https://zoom.us/j/999'], admin, '/admin/clients/c-riya/workouts');
+ assert.match(link.ok ?? JSON.stringify(link), /link saved/);
+ const nutrition = await callAction('app/actions/data.ts', 'saveNutritionPlan', ['c-riya', {calories: 1800, protein: 90, meals: [{name: 'Breakfast', detail: 'Oats and fruit'}], notes: ''}], admin, '/admin/clients/c-riya/nutrition');
+ assert.match(nutrition.ok ?? JSON.stringify(nutrition), /Nutrition plan saved/);
+ const session = await callAction('app/actions/data.ts', 'confirmSession', ['c-riya', week, true], admin, '/admin/clients/c-riya');
+ assert.match(session.ok ?? JSON.stringify(session), /marked completed/);
+ const [riya] = await sql`select meeting_url, (select count(*)::int from nutrition_plans where client_id = 'c-riya') as plans, (select count(*)::int from session_confirmations where client_id = 'c-riya') as sessions from clients where id = 'c-riya'`;
+ assert.deepEqual({...riya}, {meeting_url: 'https://zoom.us/j/999', plans: 1, sessions: 1});
+ const overview = readableText(await (await visit('/admin/clients/c-riya', admin)).text());
+ for (const tab of ['Workout plan', 'Nutrition', 'Progress & history']) assert.ok(overview.includes(tab.replace('&', '&amp;')) || overview.includes(tab), tab);
+ // A trainer still can't touch someone else's client.
+ assert.match((await callAction('app/actions/data.ts', 'saveMeetingLink', ['c-riya', 'https://zoom.us/j/1'], await sessionCookie('u-trainer-akif', 'trainer'), '/trainer/clients/c-aarav/workouts')).error ?? '', /isn’t assigned to you/);
+});
+
+test('the admin edits membership: payment, reference, join date and next check-in', async () => {
+ const admin = await sessionCookie('u-admin', 'admin');
+ const maya = await callAction('app/actions/data.ts', 'editMembership', ['c-maya', {paid: true, reference: 'UPI-77777', joinedOn: '2026-10-01', nextCheckIn: 'Sat · 9:00 AM'}], admin, '/admin/clients/c-maya');
+ assert.match(maya.ok ?? JSON.stringify(maya), /membership saved/);
+ const [m] = await sql`select paid, stage, payment_reference, joined_on::text as joined, next_checkin from clients where id = 'c-maya'`;
+ assert.deepEqual({...m}, {paid: true, stage: 'Onboarding', payment_reference: 'UPI-77777', joined: '2026-10-01', next_checkin: 'Sat · 9:00 AM'});
+ assert.match((await callAction('app/actions/data.ts', 'editMembership', ['c-maya', {paid: true, reference: '', joinedOn: '01/10/2026', nextCheckIn: ''}], admin, '/admin/clients/c-maya')).error ?? '', /valid join date/);
+ // For a member with an account, the change reaches their app too.
+ const [{revision: before}] = await sql`select revision from member_state where user_id = 'u-member-kabir'`.then(r => r.length ? r : [{revision: 0}]);
+ await callAction('app/actions/data.ts', 'editMembership', ['c-kabir', {paid: false, reference: 'BANK-123', joinedOn: '2026-10-20', nextCheckIn: 'Mon · 7:00 PM'}], admin, '/admin/clients/c-kabir');
+ const [k] = await sql`select c.paid, c.stage, ms.data->>'booking' as booking, ms.data->'payment'->>'reference' as reference, ms.revision from clients c join member_state ms on ms.user_id = c.user_id where c.id = 'c-kabir'`;
+ assert.equal(k.paid, false);
+ assert.equal(k.stage, 'Payment review', 'Un-verifying moves the client back to payment review');
+ assert.equal(k.booking, 'Mon · 7:00 PM');
+ assert.equal(k.reference, 'BANK-123');
+ assert.ok(k.revision > before);
+ assert.equal((await callAction('app/actions/data.ts', 'editMembership', ['c-maya', {paid: false, reference: '', joinedOn: '', nextCheckIn: ''}], await sessionCookie('u-trainer-akif', 'trainer'), '/admin/clients/c-maya')).ok, undefined);
+});
+
+test('the admin corrects a member’s own log, and the member’s stale app can’t overwrite it', async () => {
+ const admin = await sessionCookie('u-admin', 'admin');
+ const progress = readableText(await (await visit('/admin/clients/c-aarav/progress', admin)).text());
+ assert.match(progress, /Edit Aarav\s*’s log/);
+ const today = new Date().toLocaleDateString('en-CA', {timeZone: 'Asia/Kolkata'});
+ const future = await callAction('app/actions/data.ts', 'editMemberLog', ['c-aarav', {weights: [{label: '2099-01-01', value: 70}], fats: [], water: 0, steps: 0, sleep: null, mood: null, checkinSubmitted: false}], admin, '/admin/clients/c-aarav/progress');
+ assert.match(future.error ?? '', /date up to today/);
+ assert.match((await callAction('app/actions/data.ts', 'editMemberLog', ['c-aarav', {weights: [{label: today, value: 5}], fats: [], water: 0, steps: 0, sleep: null, mood: null, checkinSubmitted: false}], admin, '/admin/clients/c-aarav/progress')).error ?? '', /between 20 and 400/);
+ const [{revision: loaded}] = await sql`select revision from member_state where user_id = 'u-member-aarav'`;
+ const saved = await callAction('app/actions/data.ts', 'editMemberLog', ['c-aarav', {weights: [{label: '2026-11-01', value: 77.5}, {label: today, value: 76.9}], fats: [{label: today, value: 25.5}], water: 4, steps: 5200, sleep: 7, mood: 'Good', checkinSubmitted: false}], admin, '/admin/clients/c-aarav/progress');
+ assert.match(saved.ok ?? JSON.stringify(saved), /log saved/);
+ const [row] = await sql`select data, revision from member_state where user_id = 'u-member-aarav'`;
+ assert.deepEqual(row.data.tracker.weights, [{label: '2026-11-01', value: 77.5}, {label: today, value: 76.9}]);
+ assert.equal(row.data.tracker.steps, 5200);
+ assert.equal(row.data.tracker.mood, 'Good');
+ assert.equal(row.revision, loaded + 1);
+ const member = await currentCookie('u-member-aarav', 'member');
+ const stale = await callAction('app/actions/data.ts', 'saveProgress', [{...row.data, tracker: {...row.data.tracker, weights: []}}, loaded], member, '/member/overview');
+ assert.equal(stale.stale, true, 'A save from before the correction is refused');
+ assert.deepEqual((await sql`select data from member_state where user_id = 'u-member-aarav'`)[0].data.tracker.weights.length, 2, 'The correction survives');
+ const fresh = await callAction('app/actions/data.ts', 'saveProgress', [{...row.data, tracker: {...row.data.tracker, water: 5}}, loaded + 1], member, '/member/overview');
+ assert.equal(fresh.stale, false, 'A save from the current revision goes through');
+ assert.match(await (await visit('/member/overview', member)).text(), /76\.9/);
+});
+
+test('the admin removes messages; trainers cannot', async () => {
+ const admin = await sessionCookie('u-admin', 'admin');
+ const [{id}] = await sql`select id::int as id from messages where client_id = 'c-aarav' order by id limit 1`;
+ const trainerTry = await callAction('app/actions/data.ts', 'deleteClientMessage', ['c-aarav', id], await sessionCookie('u-trainer-akif', 'trainer'), '/trainer/clients/c-aarav');
+ assert.equal(trainerTry.ok, undefined);
+ assert.equal((await sql`select count(*)::int as n from messages where id = ${id}`)[0].n, 1);
+ const removed = await callAction('app/actions/data.ts', 'deleteClientMessage', ['c-aarav', id], admin, '/admin/clients/c-aarav');
+ assert.match(removed.ok ?? JSON.stringify(removed), /Message removed/);
+ assert.equal((await sql`select count(*)::int as n from messages where id = ${id}`)[0].n, 0);
+ assert.match((await callAction('app/actions/data.ts', 'deleteClientMessage', ['c-aarav', id], admin, '/admin/clients/c-aarav')).error ?? '', /no longer exists/);
+});
+
+test('the admin permanently deletes a client and all their data', async () => {
+ const admin = await sessionCookie('u-admin', 'admin');
+ await sql`insert into messages (client_id, author_id, body) values ('c-onb', 'u-member-onb', 'Delete me too')`;
+ assert.match(readableText(await (await visit('/admin/clients/c-onb', admin)).text()), /Delete client permanently/);
+ const wrong = await callAction('app/actions/data.ts', 'deleteClient', ['c-onb', 'Someone else'], admin, '/admin/clients/c-onb');
+ assert.match(wrong.error ?? '', /Type Omar B exactly/);
+ const deleted = await callAction('app/actions/data.ts', 'deleteClient', ['c-onb', 'omar b'], admin, '/admin/clients/c-onb');
+ assert.match(deleted.ok ?? JSON.stringify(deleted), /all their data were deleted/);
+ const [left] = await sql`select (select count(*)::int from clients where id = 'c-onb') as clients, (select count(*)::int from users where id = 'u-member-onb') as users,
+  (select count(*)::int from messages where client_id = 'c-onb') as messages, (select count(*)::int from password_tokens where user_id = 'u-member-onb') as tokens,
+  (select count(*)::int from member_state where user_id = 'u-member-onb') as states,
+  (select count(*)::int from audit_log where (subject_id = 'c-onb' or subject_id = 'u-member-onb') and detail <> 'Deleted client') as named`;
+ assert.deepEqual({...left}, {clients: 0, users: 0, messages: 0, tokens: 0, states: 0, named: 0});
+ assert.equal((await visit('/admin/clients/c-onb', admin)).status, 404);
+ assert.match(await (await submitForm('/login', {email: 'onb@example.com', password: 'OmarPass#2026'}, '10.7.2.1')).text(), /don’t match an account/);
+});
+
+test('the admin permanently deletes a trainer; their members become unassigned', async () => {
+ const admin = await sessionCookie('u-admin', 'admin');
+ const [nora] = await sql`select id from users where email = 'nora@example.com'`;
+ await sql`update clients set trainer_id = ${nora.id} where id = 'c-neha'`;
+ assert.match((await callAction('app/actions/data.ts', 'deleteTrainer', [nora.id, 'Nor'], admin, '/admin')).error ?? '', /Type Nora Lane exactly/);
+ const deleted = await callAction('app/actions/data.ts', 'deleteTrainer', [nora.id, 'Nora Lane'], admin, '/admin');
+ assert.match(deleted.ok ?? JSON.stringify(deleted), /Their members are now unassigned/);
+ assert.equal((await sql`select count(*)::int as n from users where id = ${nora.id}`)[0].n, 0);
+ assert.equal((await sql`select trainer_id from clients where id = 'c-neha'`)[0].trainer_id, null);
+ assert.match(readableText(await (await visit('/admin?tab=trainers', admin)).text()), /Delete trainer permanently/);
+});
+
+test('admins manage admin accounts, but never deactivate themselves', async () => {
+ const admin = await sessionCookie('u-admin', 'admin');
+ const added = await callAction('app/actions/data.ts', 'addAdmin', [{name: 'Second Admin', email: 'admin2@example.com', password: 'Admin2Pass#2026'}], admin, '/admin');
+ assert.match(added.ok ?? JSON.stringify(added), /added as an admin/);
+ assert.match((await callAction('app/actions/data.ts', 'addAdmin', [{name: 'Dup', email: 'admin2@example.com', password: ''}], admin, '/admin')).error ?? '', /already exists/);
+ const [second] = await sql`select id, role from users where email = 'admin2@example.com'`;
+ assert.equal(second.role, 'admin');
+ const settings = readableText(await (await visit('/admin?tab=settings', admin)).text());
+ assert.match(settings, /Admin accounts/);
+ assert.match(settings, /Second Admin/);
+ assert.match(settings, /Super admin \(you\)/);
+ const edited = await callAction('app/actions/data.ts', 'editAdmin', [second.id, {name: 'Second Admin', email: 'admin.two@example.com', password: ''}], admin, '/admin');
+ assert.match(edited.ok ?? JSON.stringify(edited), /details saved/);
+ assert.equal((await sql`select email from users where id = ${second.id}`)[0].email, 'admin.two@example.com');
+ assert.match((await callAction('app/actions/data.ts', 'editAdmin', [second.id, {name: 'Second Admin', email: 'trainer@repcount.demo', password: ''}], admin, '/admin')).error ?? '', /already signs in/);
+ const renamed = await callAction('app/actions/data.ts', 'editAdmin', ['u-admin', {name: 'Head Admin', email: 'admin@repcount.demo', password: ''}], admin, '/admin');
+ assert.match(renamed.ok ?? JSON.stringify(renamed), /details saved/);
+ assert.equal((await sql`select name from users where id = 'u-admin'`)[0].name, 'Head Admin');
+ assert.match((await callAction('app/actions/data.ts', 'setAccountActive', ['u-admin', false], admin, '/admin')).error ?? '', /your own account/);
+ const off = await callAction('app/actions/data.ts', 'setAccountActive', [second.id, false], admin, '/admin');
+ assert.match(off.ok ?? JSON.stringify(off), /deactivated/);
+ assert.equal((await sql`select active from users where id = ${second.id}`)[0].active, false);
+ // Trainers can't add admins.
+ assert.equal((await callAction('app/actions/data.ts', 'addAdmin', [{name: 'Sneaky', email: 'sneaky@example.com', password: 'Sneaky#20266'}], await sessionCookie('u-trainer-akif', 'trainer'), '/admin')).ok, undefined);
+ assert.equal((await sql`select count(*)::int as n from users where email = 'sneaky@example.com'`)[0].n, 0);
 });

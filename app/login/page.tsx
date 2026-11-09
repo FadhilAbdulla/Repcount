@@ -11,9 +11,9 @@ const googleErrors: Record<string, string> = {
   google_unavailable: "Google sign-in isn’t set up yet. Use your email and password.",
 };
 
-export default async function LoginPage({searchParams}: {searchParams: Promise<{error?: string}>}) {
-  const {error} = await searchParams;
+export default async function LoginPage({searchParams}: {searchParams: Promise<{error?: string; notice?: string}>}) {
+  const {error, notice} = await searchParams;
   // Demo credentials are listed only outside production builds, or when explicitly enabled.
   const showDemoAccounts = process.env.NODE_ENV !== "production" || process.env.SHOW_DEMO_ACCOUNTS === "true";
-  return <Login showDemoAccounts={showDemoAccounts} googleEnabled={googleConfig() !== null} notice={error ? googleErrors[error] : undefined}/>;
+  return <Login showDemoAccounts={showDemoAccounts} googleEnabled={googleConfig() !== null} notice={error ? googleErrors[error] : undefined} success={notice === "password_set" ? "Your password is saved. Sign in with it below." : undefined}/>;
 }

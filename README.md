@@ -26,8 +26,10 @@ Everything is stored in Postgres (Neon in production) through `DATABASE_URL`. Ta
 ## Staff features
 
 - **Trainer → Workout schedule:** pick a client and a week (this week or the next three), set each day as rest or a workout (templates or custom), add start time, duration, exercises and an optional live-session link (Google Meet, Zoom, Teams; https only). A weekly check-in call link can be saved per client. Members see the schedule on My plan with a "Join live session" button and mark workouts done; their weekly progress follows the schedule.
+- **Messages:** members ask their trainer a question from Profile; the trainer (or an admin) replies on the member's page and the member sees the conversation on Profile, with an email notification when email is set up.
 - **Admin → Trainers:** trainer performance (client load, average progress, trained today, check-ins waiting/reviewed, unpaid clients) and an Add trainer form. New trainers sign in with Google using that email, or with an optional password.
 - **Admin → Clients & payments:** filter by trainer and sort by name, trainer, progress or stage. Each name opens `/admin/clients/<id>` with contact details, payment, trainer, this week's schedule, the member's saved tracker/workout/check-in/meal data, weight trend and the client's history.
+- **Admin manages every record:** each client page has the same Overview / Workout plan / Nutrition / Progress tabs as the trainer's, so the admin can plan workouts, set call links, confirm sessions and write nutrition plans for any client. The admin also edits contact details, goal, training space and rhythm, biodata, membership (payment verified or not, reference, join date, next check-in) and the member's own log (weigh-ins, body fat, today's tracker, reopening a check-in), removes messages, and permanently deletes clients (all their data) or trainers (their members become unassigned), confirmed by typing the name. Settings → Admin accounts adds, edits and deactivates admins (never yourself). A member's open app can't save over an admin correction: `member_state.revision` is bumped and stale saves are refused, reloading the app. The audit log stays read-only.
 
 ## Google sign-in
 
@@ -44,7 +46,9 @@ Optional. Set `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` to show "Continue wi
 - Success sets a signed (HS256), httpOnly, SameSite=Lax session cookie for 7 days (`lib/session.ts`). It carries the user's session version; deactivating an account bumps it, which revokes every existing cookie.
 - `proxy.ts` redirects early; every protected layout re-checks the session, role, active flag and session version on the server (`lib/dal.ts`).
 - The first super admin comes from `ADMIN_EMAIL` (and optional `ADMIN_PASSWORD`). Demo accounts are only created with `SEED_DEMO_DATA=true`, and listed on the login page outside production builds or when `SHOW_DEMO_ACCOUNTS=true`.
-- Still missing before real clients: password reset and invitation emails.
+- Password reset: "Forgot?" on `/login` opens `/forgot-password`, which emails a one-hour, single-use link to `/reset-password` (the same reply whether or not the email exists; 3 requests per email and 10 per IP in 15 minutes). Setting a new password signs the person out everywhere. Only a SHA-256 hash of each link is stored (`password_tokens`).
+- The admin can **Send reset link** for any member (client page) or trainer (Trainers tab). Adding a member or trainer without a password sends a 7-day invitation link to choose one.
+- Email goes through Resend when `RESEND_API_KEY` and `MAIL_FROM` are set. Without them, the admin sees the link in the confirmation message to pass on by hand.
 
 ## Development
 
@@ -56,7 +60,12 @@ Optional. Set `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` to show "Continue wi
 - `npm test` builds, starts the production server against `TEST_DATABASE_URL` (a throwaway database whose name contains "test"; it is wiped), and checks rendered pages, role access and session revocation.
 - `npm run lint` and `npm run typecheck`. CI runs all of these, plus `npm audit`, on every push and pull request.
 
-Hosting: Vercel, or any Node host, with `DATABASE_URL` pointing at Neon's pooled connection string. Required environment variables: `SESSION_SECRET`, `DATABASE_URL`, `ADMIN_EMAIL`. Optional: `ADMIN_PASSWORD`, `SITE_URL`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `SHOW_DEMO_ACCOUNTS`, `SEED_DEMO_DATA` (demo deployments only).
+Hosting: Vercel, or any Node host, with `DATABASE_URL` pointing at Neon's pooled connection string. Required environment variables: `SESSION_SECRET`, `DATABASE_URL`, `ADMIN_EMAIL`. Optional: `ADMIN_PASSWORD`, `SITE_URL`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `RESEND_API_KEY`, `MAIL_FROM`, `PRIVACY_CONTACT_EMAIL`, `BACKUP_DATABASE_URL`, `SHOW_DEMO_ACCOUNTS`, `SEED_DEMO_DATA` (demo deployments only).
+
+## Privacy and backups
+
+- `/privacy` is the public privacy policy (linked from sign-up, the password page and the footer). Sign-up and accepting an invitation require ticking it; the time is stored in `users.privacy_accepted_at`. Have the text reviewed by someone qualified before launch.
+- Backups: turn on Neon point-in-time restore for the production branch, and run `npm run backup` (pg_dump into `./backups/`, newest 14 kept, git-ignored) for an off-site copy. Restore with `pg_restore --no-owner --clean --if-exists -d <url> <file>`.
 
 ## Design
 
@@ -71,4 +80,4 @@ Reduced-motion and Save Data preferences keep video posters visible without auto
 
 The programme describes an India adults-only pilot, priced in AED (default AED 299 for 30 days, editable by the super admin) with a personal training plan and weekly trainer follow-ups. Nutrition scope remains open. The psychologist onboarding service has been withdrawn and is not offered.
 
-Before real client use, add password-reset and invitation emails, real messaging, a privacy policy with consent, and backups. Brand availability has not been checked.
+Before real client use: set up Resend (or another email provider) on a verified domain, have the privacy policy reviewed, enable Neon point-in-time restore and schedule `npm run backup`. Brand availability has not been checked.

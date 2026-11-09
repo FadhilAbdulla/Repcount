@@ -1,0 +1,8 @@
+/* Public privacy policy: one readable column. */
+.rc-privacy{max-width:720px;margin:0 auto;padding:40px 16px 64px;background:#faf7f1;color:#252822;font-size:15px;line-height:1.6}
+.rc-privacy h1{margin:28px 0 4px;font-size:clamp(30px,6vw,42px);line-height:1.1}
+.rc-privacy h2{margin:32px 0 8px;font-size:19px}
+.rc-privacy ul{padding-left:20px;display:flex;flex-direction:column;gap:6px}
+.rc-privacy a{color:#a91530}
+.rc-privacy-updated{margin:0;color:#62675b;font-size:13px}
+.rc-privacy-back{margin-top:40px}

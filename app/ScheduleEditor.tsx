@@ -24,23 +24,26 @@ const emptyWeek: WeekPlan = Array(7).fill(null);
 const dateOf = (week: string, i: number, opts: Intl.DateTimeFormatOptions = {day: "numeric", month: "short"}) => new Date(Date.parse(`${week}T00:00:00Z`) + i * 86400000).toLocaleDateString("en-GB", {...opts, timeZone: "UTC"});
 const isoOf = (week: string, i: number) => new Date(Date.parse(`${week}T00:00:00Z`) + i * 86400000).toISOString().slice(0, 10);
 const plansKey = (client: ClientRow, week: string) => `${client.id}|${week}`;
-export const workoutsPath = (clientId: string) => `/trainer/clients/${clientId}/workouts`;
+/** The workout pages live under whichever area is planning: /trainer/clients/<id>/workouts or /admin/clients/<id>/workouts. */
+export const workoutsPath = (clientId: string, area: "trainer" | "admin" = "trainer") => `/${area}/clients/${clientId}/workouts`;
 
 /**
  * The Workout plan page for one member: pick a week, set their check-in call link, and see the seven days as cards.
  * Each card opens that day's own page to edit it; whole-week shortcuts save straight away.
  */
-export function WeekOverview({client, weeks, week, plans, today, pending, run}: {
-  client: ClientRow; weeks: Week[]; week: string; plans: Record<string, WeekPlan | null>; today: string; pending: boolean; run: Run;
+export function WeekOverview({client, weeks, week, plans, today, pending, run, area = "trainer"}: {
+  area?: "trainer" | "admin"; client: ClientRow; weeks: Week[]; week: string; plans: Record<string, WeekPlan | null>; today: string; pending: boolean; run: Run;
 }) {
   const saved = plans[plansKey(client, week)] ?? null;
   const days = saved ?? emptyWeek;
   const weekIndex = weeks.findIndex(w => w.start === week);
   const previous = weekIndex > 0 ? plans[plansKey(client, weeks[weekIndex - 1].start)] : null;
   const workouts = days.filter(Boolean).length;
+  // The rhythm the member chose at onboarding, e.g. "3 days a week" → 3.
+  const preferred = client.intake ? Number(/\d+/.exec(client.intake.days)?.[0] ?? NaN) || null : null;
   const [allLink, setAllLink] = useState("");
   const firstName = client.name.split(" ")[0];
-  const base = workoutsPath(client.id);
+  const base = workoutsPath(client.id, area);
   // Shortcuts replace the saved week, so ask before overwriting workouts that are already there.
   const replace = (plan: WeekPlan, what: string) => {
     if (workouts > 0 && !window.confirm(`${what} replaces the ${workouts} workout${workouts === 1 ? "" : "s"} already planned for this week. Continue?`)) return;
@@ -57,6 +60,7 @@ export function WeekOverview({client, weeks, week, plans, today, pending, run}: 
 
     <section className="card rc-schedule">
       <div className="section-top"><h2>{firstName}’s week</h2><span className="pill">{workouts} WORKOUT{workouts === 1 ? "" : "S"}{saved ? "" : " · NOT SCHEDULED"}</span></div>
+      {client.intake && <p className="rc-week-preference" role="note"><b>{firstName} prefers {client.intake.days.replace(" a week", "")} a week · {client.intake.place.toLowerCase()}.</b>{preferred !== null && workouts > 0 && workouts !== preferred && <> This week has {workouts} workout{workouts === 1 ? "" : "s"}. Worth agreeing the rhythm together.</>}</p>}
       <p className="small-note">Open a day to plan it. {firstName} sees saved days on their plan straight away.</p>
       <ol className="rc-week-days">{days.map((w, i) => {
         const iso = isoOf(week, i);
@@ -100,8 +104,8 @@ function MeetingLink({client, pending, run}: {client: ClientRow; pending: boolea
 }
 
 /** One day of a member's week on its own page. Saving keeps the rest of the week as it is. */
-export function DayEditor({client, weeks, week, day, plans, pending, run}: {
-  client: ClientRow; weeks: Week[]; week: string; day: number; plans: Record<string, WeekPlan | null>; pending: boolean; run: Run;
+export function DayEditor({client, weeks, week, day, plans, pending, run, area = "trainer"}: {
+  area?: "trainer" | "admin"; client: ClientRow; weeks: Week[]; week: string; day: number; plans: Record<string, WeekPlan | null>; pending: boolean; run: Run;
 }) {
   const saved = plans[plansKey(client, week)] ?? emptyWeek;
   const [d, setD] = useState<DraftDay>(() => toDraft(saved[day]));
@@ -111,7 +115,7 @@ export function DayEditor({client, weeks, week, day, plans, pending, run}: {
     else if (kind === "Custom") update({kind, title: d.title || "Custom session"});
     else update({kind, title: kind, exercises: templates[kind].exercises.join("\n"), duration: String(templates[kind].durationMin)});
   };
-  const base = workoutsPath(client.id);
+  const base = workoutsPath(client.id, area);
   const weekLabel = weeks.find(w => w.start === week)?.label ?? `Week of ${dateOf(week, 0)}`;
   const sibling = (i: number) => i >= 0 && i < 7 && <Link className="small-button" href={`${base}/${week}/${daySlugs[i]}`}>{i < day ? "← " : ""}{dayNames[i]}{i > day ? " →" : ""}</Link>;
 

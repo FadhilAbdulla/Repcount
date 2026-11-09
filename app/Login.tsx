@@ -1,7 +1,7 @@
 "use client";
 
 import Photo from './Photo';
-import {useActionState,useEffect,useRef,useState} from 'react';
+import {useActionState,useEffect,useRef} from 'react';
 import Link from 'next/link';
 import Brand from './Brand';
 import {Icon,media} from './Media';
@@ -49,10 +49,9 @@ export function AuthShell({active,children}:{active?:'login'|'register';children
 }
 
 /** Sign in for members, trainers and the super admin (password or Google). */
-export default function Login({showDemoAccounts,googleEnabled,notice}:{showDemoAccounts:boolean;googleEnabled:boolean;notice?:string}) {
+export default function Login({showDemoAccounts,googleEnabled,notice,success}:{showDemoAccounts:boolean;googleEnabled:boolean;notice?:string;success?:string}) {
   const heading=useRef<HTMLHeadingElement>(null);
   const form=useRef<HTMLFormElement>(null);
-  const [help,setHelp]=useState(false);
   const [state,action,pending]=useActionState<LoginState,FormData>(login,undefined);
   const error=state?.error??notice;
   useEffect(()=>{heading.current?.focus({preventScroll:true});},[]);
@@ -68,11 +67,10 @@ export default function Login({showDemoAccounts,googleEnabled,notice}:{showDemoA
     <h1 id="auth-heading" tabIndex={-1} ref={heading}>Welcome <em>back.</em></h1>
     <p className="rc-login-lead">Members, trainers and admins sign in here.</p>
     <form ref={form} className="rc-login-form" action={action} noValidate>
-      {error&&<div className="rc-login-error" role="alert">{error}</div>}
+      {error?<div className="rc-login-error" role="alert">{error}</div>:success&&<div className="rc-login-success" role="status">{success}</div>}
       <label><span>Email</span><input name="email" type="email" placeholder="you@example.com" autoComplete="username" required defaultValue={state?.email} aria-invalid={!!state?.error}/></label>
-      <label><span className="rc-login-label-row">Password<button type="button" aria-expanded={help} aria-controls="login-help" onClick={()=>setHelp(!help)}>Forgot?</button></span>
+      <label><span className="rc-login-label-row">Password<Link href="/forgot-password">Forgot?</Link></span>
         <input name="password" type="password" placeholder="Your password" autoComplete="current-password" required aria-invalid={!!state?.error}/></label>
-      {help&&<p id="login-help" className="rc-login-small" role="status">Ask the RepCount team to reset your password, or sign in with Google.</p>}
       <button type="submit" className="rc-login-submit" disabled={pending}>{pending?'Signing in…':'Sign in'} <Icon name="arrow" size={18}/></button>
       {googleEnabled&&<a className="rc-login-google" href="/api/auth/google">{googleMark}Continue with Google</a>}
     </form>

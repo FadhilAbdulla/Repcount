@@ -33,5 +33,5 @@ Use a Neon branch (for example `dev`) for local work, so development never write
 ## Still to do before real clients
 
 - Password reset and invitation emails (needs a transactional email provider such as Resend or Postmark).
-- Backups and retention: turn on Neon point-in-time restore for the production branch and decide a retention period.
+- Backups and retention: turn on Neon point-in-time restore for the production branch, and schedule `npm run backup` (see README) for an off-site copy kept encrypted. The privacy policy promises deletion up to 12 months after a programme ends.
 - Privacy policy, consent at sign-up and a data-deletion process for health data.

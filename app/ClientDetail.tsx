@@ -5,8 +5,10 @@ import Link from "next/link";
 import {Icon} from "./Media";
 import {LineChart, palette} from "./Tracker";
 import {activityLabels} from "./StaffApp";
-import {assignTrainer, setAccountActive, setClientStage, verifyPayment} from "./actions/data";
-import type {ClientDetail as Detail} from "@/lib/store";
+import {assignTrainer, sendResetLink, setAccountActive, setClientStage, verifyPayment} from "./actions/data";
+import {StaffConversation} from "./Conversation";
+import type {ClientDetail as Detail, MemberLog} from "@/lib/store";
+import {DeleteAccount, MemberLogEditor, MembershipEditor} from "./AdminEditors";
 import {ageFrom, memberCode, stages} from "@/lib/programme";
 import ClientBioEditor from "./ClientBioEditor";
 import {dayNames, formatTime, type WeekPlan} from "@/lib/schedule";
@@ -26,10 +28,10 @@ const formatDate = (iso: string | null) => iso ? new Date(`${iso.length === 10 ?
 const shortDate = (label: string) => /^\d{4}-\d{2}-\d{2}$/.test(label) ? formatDate(label).replace(/ \d{4}$/, "") : label;
 
 /**
- * One client: profile, membership, coaching, saved progress and history. Admins see it all on one page and can also change
- * payment, trainer, stage and access; trainers see one `section` at a time with tabs between them.
+ * One client: profile, membership, coaching, saved progress and history, one `section` at a time with tabs between them.
+ * The trainer manages coaching; the admin manages coaching too, and can also edit or delete every other record.
  */
-export default function ClientDetail({viewer, section, detail, trainers, coaching}: {viewer: "admin" | "trainer"; section?: MemberSection; detail: Detail; trainers: {id: string; name: string}[]; coaching?: Coaching}) {
+export default function ClientDetail({viewer, section, detail, trainers, coaching, log = null}: {viewer: "admin" | "trainer"; section?: MemberSection; detail: Detail; trainers: {id: string; name: string}[]; coaching?: Coaching; log?: MemberLog | null}) {
   const {client: c, state, history, lastSaved, plan, pastWeeks, messages} = detail;
   const admin = viewer === "admin";
   const firstName = c.name.split(" ")[0];
@@ -90,11 +92,11 @@ export default function ClientDetail({viewer, section, detail, trainers, coachin
         <div><dt>Date of birth</dt><dd>{c.bio?.dob ? `${formatDate(c.bio.dob)} · ${ageFrom(c.bio.dob)} years` : "—"}</dd></div>
         <div><dt>Gender</dt><dd>{c.bio?.gender ?? "—"}</dd></div>
         <div><dt>Height</dt><dd>{c.bio?.heightCm ? `${c.bio.heightCm} cm` : "—"}</dd></div>
-        <div><dt>Member login</dt><dd>{!c.userId ? "No account yet" : c.accountActive ? "Active account" : "Deactivated"}{admin && c.userId && <> <button className="small-button" disabled={pending} onClick={() => run(() => setAccountActive(c.userId!, !c.accountActive, c.id))}>{c.accountActive ? "Deactivate" : "Reactivate"}</button></>}</dd></div>
+        <div><dt>Member login</dt><dd>{!c.userId ? "No account yet" : c.accountActive ? "Active account" : "Deactivated"}{admin && c.userId && <> <button className="small-button" disabled={pending} onClick={() => run(() => setAccountActive(c.userId!, !c.accountActive, c.id))}>{c.accountActive ? "Deactivate" : "Reactivate"}</button>{c.accountActive && <button className="small-button" disabled={pending} onClick={() => run(() => sendResetLink(c.userId!, c.id))}>Send reset link</button>}</>}</dd></div>
         <div><dt>Last saved activity</dt><dd>{lastSaved ? `${lastSaved.slice(0, 16)} UTC` : "—"}</dd></div>
       </dl></section>
 
-      <section className="card"><h2>Membership &amp; coaching</h2><dl className="rc-detail-list">
+      <section className="card"><div className="section-top"><h2>Membership &amp; coaching</h2>{admin && <MembershipEditor client={c} pending={pending} run={run}/>}</div><dl className="rc-detail-list">
         <div><dt>Payment</dt><dd>{c.paid ? <span className="paid">Verified ✓</span> : !admin ? "Awaiting verification" : <button className="small-button" disabled={pending} onClick={() => run(() => verifyPayment(c.id))}>Verify {c.reference ?? "payment"}</button>}</dd></div>
         <div><dt>Payment reference</dt><dd>{c.reference ?? "—"}</dd></div>
         <div><dt>Trainer</dt><dd>{admin ? <select aria-label={`Trainer for ${c.name}`} value={c.trainerId ?? ""} disabled={pending} onChange={e => {const trainerId = e.target.value; run(() => assignTrainer(c.id, trainerId));}}><option value="">Unassigned</option>{trainers.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}</select> : c.trainer}</dd></div>
@@ -104,16 +106,18 @@ export default function ClientDetail({viewer, section, detail, trainers, coachin
       </dl></section>
     </div>
 
-    <section className="card"><div className="section-top"><h2>Questions from {firstName}</h2><span className="pill">{messages.length} MESSAGES</span></div>
-      {messages.length === 0 ? <p className="rc-staff-empty">No questions yet.</p>
-        : <ul className="rc-staff-activity">{messages.map((m, i) => <li key={i}><b>{m.author}</b><span>{m.body}</span><time dateTime={m.at.replace(" ", "T") + "Z"}>{m.at.slice(0, 16)} UTC</time></li>)}</ul>}
-    </section>
+    <StaffConversation clientId={c.id} firstName={firstName} messages={messages} canReply={c.userId !== null} canDelete={admin} pending={pending} run={run}/>
+
+    {admin && <section className="card rc-danger-zone"><h2>Delete client</h2>
+      <p>Permanently removes {firstName} and everything stored about them. To pause access instead, use Deactivate under Contact &amp; account.</p>
+      <DeleteAccount kind="client" id={c.id} name={c.name} pending={pending} run={run}/>
+    </section>}
 
     </>}
 
     {section === "workouts" && coaching && (coaching.day === undefined
-      ? <WeekOverview client={c} weeks={coaching.weeks} week={coaching.week} plans={coaching.plans} today={coaching.today} pending={pending} run={run}/>
-      : <DayEditor key={`${coaching.week}-${coaching.day}`} client={c} weeks={coaching.weeks} week={coaching.week} day={coaching.day} plans={coaching.plans} pending={pending} run={run}/>)}
+      ? <WeekOverview area={viewer} client={c} weeks={coaching.weeks} week={coaching.week} plans={coaching.plans} today={coaching.today} pending={pending} run={run}/>
+      : <DayEditor area={viewer} key={`${coaching.week}-${coaching.day}`} client={c} weeks={coaching.weeks} week={coaching.week} day={coaching.day} plans={coaching.plans} pending={pending} run={run}/>)}
 
     {section === "nutrition" && coaching && <>
       <NutritionPlanEditor clientId={c.id} firstName={firstName} plan={coaching.nutrition} pending={pending} run={run}/>
@@ -126,7 +130,7 @@ export default function ClientDetail({viewer, section, detail, trainers, coachin
 
     {shows("progress") && <>
     {state ? <>
-      <div className="section-heading"><h2>This week, from the member’s app</h2><span>SAVED AUTOMATICALLY</span></div>
+      <div className="section-heading"><h2>This week, from the member’s app</h2>{admin && log && coaching ? <MemberLogEditor clientId={c.id} firstName={firstName} log={log} today={coaching.today} pending={pending} run={run}/> : <span>SAVED AUTOMATICALLY</span>}</div>
       <div className="two-grid equal rc-detail-grid">
         <section className="card"><h2>Today’s tracker</h2><dl className="rc-detail-list rc-detail-two">
           <div><dt>Water</dt><dd>{state.tracker.water} glasses</dd></div>

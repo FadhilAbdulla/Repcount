@@ -27,6 +27,7 @@ export default function Register() {
         <label><span>Password</span><input name="password" type="password" autoComplete="new-password" placeholder="10+ characters" minLength={10} required/></label>
       </div>
       <label className="rc-register-consent"><input type="checkbox" name="adult" required/><span>I’m 18 or over and agree to be contacted about my programme.</span></label>
+      <label className="rc-register-consent"><input type="checkbox" name="privacy" required/><span>I’ve read and accept the <Link href="/privacy" target="_blank">privacy policy</Link>, including how my health and activity data is used.</span></label>
       <button type="submit" className="rc-login-submit" disabled={pending}>{pending ? "Creating your account…" : "Continue"} <Icon name="arrow" size={18}/></button>
     </form>
     <p className="rc-login-switch">Already a member? <Link href="/login">Sign in →</Link></p>

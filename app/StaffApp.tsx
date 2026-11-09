@@ -8,10 +8,12 @@ import Brand from "./Brand";
 import {Icon} from "./Media";
 import {BarChart, StaffInsights, palette} from "./Tracker";
 import {logout} from "./actions/auth";
-import {addClient, addTrainer, assignTrainer, editTrainer, reviewCheckin, saveSettings, setAccountActive, verifyPayment} from "./actions/data";
+import {addClient, addTrainer, assignTrainer, editTrainer, reviewCheckin, saveSettings, sendResetLink, setAccountActive, verifyPayment} from "./actions/data";
 import type {AuditEntry, ClientRow, Settings, TrainerStats} from "@/lib/store";
 import {memberCode} from "@/lib/programme";
 import Modal from "./Modal";
+import {AdminAccounts, DeleteAccount} from "./AdminEditors";
+import type {AdminAccount} from "@/lib/users";
 import "./member-polish.css";
 import "./accessibility-polish.css";
 import "./staff.css";
@@ -34,7 +36,7 @@ const headings: Record<string, [string, string]> = {
   settings: ["Programme settings.", "Pricing and cohort rules for the pilot."],
 };
 
-export const activityLabels: Record<string, string> = {assign_trainer: "Trainer assigned", verify_payment: "Payment verified", review_checkin: "Check-in reviewed", update_settings: "Settings updated", add_trainer: "Trainer added", edit_trainer: "Trainer edited", edit_client: "Client details edited", schedule_week: "Week scheduled", confirm_session: "Session completed", unconfirm_session: "Session completion removed", save_nutrition: "Nutrition plan saved", set_meeting_link: "Call link updated", add_client: "Client added", set_stage: "Stage changed", deactivate_user: "Account deactivated", reactivate_user: "Account reactivated", self_register: "Registered online", ask_coach: "Question sent", complete_onboarding: "Onboarding answered"};
+export const activityLabels: Record<string, string> = {assign_trainer: "Trainer assigned", verify_payment: "Payment verified", review_checkin: "Check-in reviewed", update_settings: "Settings updated", add_trainer: "Trainer added", edit_trainer: "Trainer edited", edit_client: "Client details edited", schedule_week: "Week scheduled", confirm_session: "Session completed", unconfirm_session: "Session completion removed", save_nutrition: "Nutrition plan saved", set_meeting_link: "Call link updated", add_client: "Client added", set_stage: "Stage changed", deactivate_user: "Account deactivated", reactivate_user: "Account reactivated", self_register: "Registered online", ask_coach: "Question sent", reply_member: "Reply sent", send_reset_link: "Reset link sent", edit_membership: "Membership edited", edit_member_log: "Member log corrected", delete_client: "Client deleted", delete_trainer: "Trainer deleted", delete_message: "Message removed", add_admin: "Admin added", edit_admin: "Admin edited", complete_onboarding: "Onboarding answered"};
 const stageOrder = ["Payment review", "Onboarding", "Check-in due", "Active"];
 const sorters: Record<string, (a: ClientRow, b: ClientRow) => number> = {
   Name: (a, b) => a.name.localeCompare(b.name),
@@ -48,10 +50,10 @@ const emptyClient = {name: "", email: "", phone: "", goal: "", trainerId: "", pa
 
 type Props = {
   area: StaffRole; user: StaffUser; clients: ClientRow[]; settings: Settings; activity: AuditEntry[];
-  trainers?: TrainerStats[]; initialTab?: string; detail?: ReactNode;
+  trainers?: TrainerStats[]; initialTab?: string; detail?: ReactNode; admins?: AdminAccount[];
 };
 
-export default function StaffApp({area: role, user, clients, settings, activity, trainers = [], initialTab, detail}: Props) {
+export default function StaffApp({area: role, user, clients, settings, activity, trainers = [], initialTab, detail, admins = []}: Props) {
   const router = useRouter();
   const [tab, setTab] = useState(initialTab && tabs[role].some(([key]) => key === initialTab) ? initialTab : tabs[role][0][0]);
   const [filter, setFilter] = useState("All clients");
@@ -59,7 +61,7 @@ export default function StaffApp({area: role, user, clients, settings, activity,
   const [sort, setSort] = useState("Trainer");
   const [newTrainer, setNewTrainer] = useState(emptyTrainer);
   const [addingTrainer, setAddingTrainer] = useState(false);
-  const [editing, setEditing] = useState<{id: string; name: string; title: string} | null>(null);
+  const [editing, setEditing] = useState<{id: string; name: string; email: string; title: string; password: string} | null>(null);
   const [paymentFilter, setPaymentFilter] = useState("All payments");
   const [profileFilter, setProfileFilter] = useState("All profiles");
   const [newClient, setNewClient] = useState(emptyClient);
@@ -218,8 +220,10 @@ export default function StaffApp({area: role, user, clients, settings, activity,
             </dl>
             <button className="button outline" onClick={() => {setTrainerFilter(t.id); setSort("Name"); openTab("clients");}}>View {t.name}’s clients →</button>
             <div className="rc-trainer-actions">
-              <button className="text-button" onClick={() => {setNotice(""); setEditing({id: t.id, name: t.name, title: t.title});}}>Edit name &amp; title</button>
+              <button className="text-button" onClick={() => {setNotice(""); setEditing({id: t.id, name: t.name, email: t.email, title: t.title, password: ""});}}>Edit details</button>
               <button className="text-button" disabled={pending} onClick={() => run(() => setAccountActive(t.id, !t.active))}>{t.active ? "Deactivate sign-in" : "Reactivate sign-in"}</button>
+              {t.active && <button className="text-button" disabled={pending} onClick={() => run(() => sendResetLink(t.id))}>Send reset link</button>}
+              <DeleteAccount kind="trainer" id={t.id} name={t.name} pending={pending} run={run}/>
             </div>
           </section>)}</div>
           <Modal open={addingTrainer} eyebrow="COACHING TEAM" title="Add a trainer" onClose={() => setAddingTrainer(false)}>
@@ -236,8 +240,10 @@ export default function StaffApp({area: role, user, clients, settings, activity,
           <Modal open={editing !== null} eyebrow="COACHING TEAM" title="Edit trainer" onClose={() => setEditing(null)}>
             {editing && <form className="rc-modal-form" onSubmit={e => {e.preventDefault(); run(async () => {const result = await editTrainer(editing.id, editing); if (result.ok) setEditing(null); return result;});}}>
               <label className="field">Full name<input value={editing.name} onChange={e => setEditing({...editing, name: e.target.value})} required maxLength={40} autoComplete="off"/></label>
+              <label className="field">Email (Google account)<input type="email" value={editing.email} onChange={e => setEditing({...editing, email: e.target.value})} required autoComplete="off"/></label>
               <label className="field">Role title<input value={editing.title} onChange={e => setEditing({...editing, title: e.target.value})} maxLength={40}/></label>
-              <p className="small-note">Members and the trainer see the new name straight away.</p>
+              <label className="field">New password (optional)<input type="password" value={editing.password} onChange={e => setEditing({...editing, password: e.target.value})} minLength={10} autoComplete="new-password" placeholder="Leave blank to keep the current one"/></label>
+              <p className="small-note">Members and the trainer see changes straight away. After an email change the trainer signs in with the new email. A new password signs them out everywhere.</p>
               {notice && noticeError && <p className="rc-modal-error" role="alert">{notice}</p>}
               <button className="button dark" type="submit" disabled={pending}>{pending ? "Saving…" : "Save changes"} →</button>
             </form>}
@@ -252,6 +258,7 @@ export default function StaffApp({area: role, user, clients, settings, activity,
             <button className="button dark" type="submit" disabled={pending}>{pending ? "Saving…" : "Save settings"}</button>
           </form>
           <p className="small-note">Members see the new price on their profile page straight away.</p></section>}
+        {tab === "settings" && role === "admin" && <AdminAccounts admins={admins} selfEmail={user.email} pending={pending} run={run}/>}
         </>}
         <footer><span><Brand variant="phone"/></span><span>{role === "admin" ? "Super admin" : "Trainer"} · signed in as {user.email}</span></footer>
       </main>

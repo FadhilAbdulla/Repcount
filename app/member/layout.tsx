@@ -2,7 +2,7 @@ import type {Metadata} from "next";
 import {redirect} from "next/navigation";
 import {requireRole} from "@/lib/dal";
 import {istToday} from "@/lib/dates";
-import {clientByUser, confirmedDays, getMemberDays, getMemberState, getNutritionPlan, getSettings, getWeekPlan, leaderboard} from "@/lib/store";
+import {clientByUser, confirmedDays, getMemberDays, getMemberState, getNutritionPlan, getSettings, getMemberRevision, getWeekPlan, leaderboard, listMessages} from "@/lib/store";
 import {findUser} from "@/lib/users";
 import MemberApp from "../MemberApp";
 
@@ -14,15 +14,15 @@ const formatDay = (iso: string, plus: number) => new Date(Date.parse(`${iso}T00:
 export default async function MemberLayout({children}: {children: React.ReactNode}) {
   const user = await requireRole("member");
   const {day, weekStart} = istToday();
-  const [settings, client, initial] = await Promise.all([getSettings(), clientByUser(user.id), getMemberState(user.id)]);
+  const [settings, client, initial, revision] = await Promise.all([getSettings(), clientByUser(user.id), getMemberState(user.id), getMemberRevision(user.id)]);
   // New members answer the three onboarding questions before their dashboard opens.
   if (client && !client.intake) redirect("/onboarding");
   // The 30-day calendar starts on the day they joined, or 29 days ago, whichever is later.
   const monthAgo = new Date(Date.parse(`${day}T00:00:00Z`) - 29 * 86400000).toISOString().slice(0, 10);
   const since = client?.joinedOn && client.joinedOn > monthAgo ? client.joinedOn : monthAgo;
-  const [trainer, schedule, history, nutritionPlan, confirmed, ranking] = await Promise.all([
+  const [trainer, schedule, history, nutritionPlan, confirmed, ranking, messages] = await Promise.all([
     client?.trainerId ? findUser(client.trainerId) : null, client ? getWeekPlan(client.id, weekStart) : null, getMemberDays(user.id, since),
-    client ? getNutritionPlan(client.id) : null, client ? confirmedDays(client.id, weekStart, day) : [], leaderboard(),
+    client ? getNutritionPlan(client.id) : null, client ? confirmedDays(client.id, weekStart, day) : [], leaderboard(), client ? listMessages(client.id) : [],
   ]);
   const me = ranking.find(r => r.userId === user.id);
   return <>
@@ -41,6 +41,8 @@ export default async function MemberLayout({children}: {children: React.ReactNod
       past={me ? {streak: me.pastStreak, confirmedToday: me.confirmedToday} : {streak: 0, confirmedToday: false}}
       history={history}
       since={since}
+      messages={messages}
+      revision={revision}
     />
     {children}
   </>;

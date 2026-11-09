@@ -1,0 +1,11 @@
+/* Member ↔ trainer conversation, shared by the staff client page and the member Profile. */
+.rc-thread{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:10px;max-height:420px;overflow-y:auto}
+.rc-thread li{max-width:min(520px,88%);padding:10px 14px;border-radius:12px 12px 12px 4px;background:#f3efe7;border:1px solid #e3ddd0}
+.rc-thread li.mine{align-self:flex-end;border-radius:12px 12px 4px 12px;background:#fbeeee;border-color:#f0cfd3}
+.rc-thread b{display:block;font-size:11px;letter-spacing:.4px;color:#62675b}
+.rc-thread p{margin:4px 0;font-size:14px;line-height:1.45;white-space:pre-wrap;overflow-wrap:anywhere;color:#252822}
+.rc-thread time{font-size:11px;color:#7b7d73}
+.rc-thread-reply{display:flex;flex-direction:column;gap:10px;margin-top:16px}
+.rc-thread-reply textarea{display:block;width:100%;margin-top:9px;padding:12px;border:1px solid #d8dece;border-radius:6px;background:#fdfdf8;color:var(--ink);font:inherit;resize:vertical}
+.rc-thread-reply .button{align-self:flex-start}
+.rc-thread-delete{margin-left:10px;padding:0;font-size:11px;color:#a8202f;text-decoration:underline;background:none;border:0;min-height:0}

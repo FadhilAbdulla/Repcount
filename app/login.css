@@ -34,7 +34,7 @@
 .rc-login-form label>span{font-size:12px;font-weight:600;color:#43483e}
 .rc-login-form label>span i{font-style:normal;font-weight:400;color:#7b7d73}
 .rc-login-label-row{display:flex;justify-content:space-between;align-items:center}
-.rc-login-label-row button{background:none;border:0;padding:0;color:#a91530;font-size:12px;font-weight:600}
+.rc-login-label-row button,.rc-login-label-row a{text-decoration:none;background:none;border:0;padding:0;color:#a91530;font-size:12px;font-weight:600}
 .rc-login-form :is(input,select){width:100%;height:clamp(42px,6vh,50px);border:1px solid #d6d8cb;border-radius:9px;background:#fffdf8;color:#252822;padding:0 14px;font:15px 'DM Sans',Arial,sans-serif}
 .rc-login-form :is(input,select):focus{border-color:#e51937;outline:2px solid #e5193733;outline-offset:0}
 .rc-login-form input::placeholder{color:#8a8c81}
@@ -43,6 +43,7 @@
 .rc-login-grid{display:grid;grid-template-columns:1fr 1fr;gap:clamp(10px,1.7vh,14px) 12px}
 .rc-login-grid .rc-login-wide{grid-column:1/-1}
 .rc-login-error{padding:10px 12px;border-radius:9px;background:#fdecec;border:1px solid #f4c4c9;color:#a3122a;font-size:13px;font-weight:600;line-height:1.4}
+.rc-login-success{padding:10px 12px;border-radius:9px;background:#edf5ec;border:1px solid #bfd9bb;color:#2f5e2a;font-size:13px;font-weight:600;line-height:1.4}
 .rc-login-notice{padding:10px 12px;border-radius:9px;background:#e8eddd;border:1px solid #d6ddc7;color:#4f5d3d;font-size:13px;line-height:1.4}
 .rc-login-submit{display:flex;justify-content:space-between;align-items:center;width:100%;min-height:clamp(42px,6vh,50px);padding:0 18px;border:0;border-radius:9px;background:#e51937;color:#fff;font-size:14px;font-weight:600}
 .rc-login-submit:hover{background:#bf1230}

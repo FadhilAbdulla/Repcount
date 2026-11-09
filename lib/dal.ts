@@ -21,6 +21,14 @@ export async function requireRole(role: Role): Promise<User> {
   return user;
 }
 
+/** Trainers and admins: for actions both can take (an admin may act on any client, a trainer only on their own). */
+export async function requireStaff(): Promise<User> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  if (user.role === "member") redirect(roleHome.member);
+  return user;
+}
+
 /** Sets the signed session cookie. Used by password sign-in and Google sign-in. */
 export async function startSession(user: User) {
   const expires = sessionExpiry();

@@ -46,3 +46,7 @@ next-env.d.ts
 
 # local database
 /data/
+
+# local credentials and database backups
+cred.txt
+/backups/
