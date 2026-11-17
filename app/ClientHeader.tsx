@@ -4,18 +4,20 @@ import {useState, useTransition} from "react";
 import Link from "next/link";
 import {usePathname} from "next/navigation";
 import {Icon} from "./Media";
-import {setClientStage} from "./actions/data";
+import {assignTrainer, setClientCancelled} from "./actions/data";
 import ClientBioEditor from "./ClientBioEditor";
-import {memberCode, stages} from "@/lib/programme";
+import {clientStatus, memberCode} from "@/lib/programme";
 import type {ClientRow} from "@/lib/store";
 
 const sections: [string, string, string][] = [["overview", "Overview", ""], ["workouts", "Workout plan", "/workouts"], ["nutrition", "Nutrition", "/nutrition"], ["progress", "Progress & history", "/progress"]];
 const formatDate = (iso: string | null) => iso ? new Date(`${iso.slice(0, 10)}T00:00:00Z`).toLocaleDateString("en-GB", {day: "numeric", month: "short", year: "numeric", timeZone: "UTC"}) : "—";
-/** A stage name as a CSS-friendly key for its colour, e.g. "Check-in due" → "check-in-due". */
-const stageKey = (stage: string) => stage.toLowerCase().replace(/[^a-z]+/g, "-");
+const CANCELLED = "cancelled";
 
-/** The client's name, stage and details button, and the tabs between their pages. Stays mounted while the tabs change. */
-export default function ClientHeader({viewer, client: c}: {viewer: "admin" | "trainer"; client: ClientRow}) {
+/**
+ * The client's name, status and details button, and the tabs between their pages. Stays mounted while the tabs change.
+ * Status is one of three: Unassigned, Assigned (to a trainer) or Cancelled. The admin changes it here.
+ */
+export default function ClientHeader({viewer, client: c, trainers = []}: {viewer: "admin" | "trainer"; client: ClientRow; trainers?: {id: string; name: string; active: boolean}[]}) {
   const admin = viewer === "admin";
   const base = `/${viewer}/clients/${c.id}`;
   const path = usePathname();
@@ -27,6 +29,19 @@ export default function ClientHeader({viewer, client: c}: {viewer: "admin" | "tr
     const result = await action();
     setNoticeError(!result.ok);
     setNotice(result.ok ?? result.error ?? "");
+  });
+  const status = clientStatus(c);
+  /** "" = unassigned, a trainer id = assigned to them, CANCELLED = cancel the membership. Choosing a trainer restores a cancelled one. */
+  const changeStatus = (value: string) => run(async () => {
+    if (value === CANCELLED) {
+      if (!confirm(`Cancel ${c.name}’s membership? You can restore it later.`)) return {};
+      return setClientCancelled(c.id, true);
+    }
+    if (c.cancelled) {
+      const restored = await setClientCancelled(c.id, false);
+      if (restored.error) return restored;
+    }
+    return assignTrainer(c.id, value);
   });
 
   return <>
@@ -47,12 +62,18 @@ export default function ClientHeader({viewer, client: c}: {viewer: "admin" | "tr
       </div>
       <div className="rc-client-head-actions">
         {admin
-          ? <label className="rc-stage-control" data-stage={stageKey(c.stage)}>
+          ? <label className="rc-stage-control" data-stage={status.toLowerCase()}>
               <span className="rc-stage-dot" aria-hidden="true"/>
-              <span className="rc-stage-label">Stage</span>
-              <select aria-label={`Stage for ${c.name}`} value={c.stage} disabled={pending} onChange={e => {const stage = e.target.value; run(() => setClientStage(c.id, stage));}}>{stages.map(s => <option key={s}>{s}</option>)}</select>
+              <span className="rc-stage-label">Status</span>
+              <select aria-label={`Status for ${c.name}`} value={c.cancelled ? CANCELLED : c.trainerId ?? ""} disabled={pending} onChange={e => changeStatus(e.target.value)}>
+                <option value="">Unassigned</option>
+                <optgroup label="Assigned to">
+                  {trainers.filter(t => t.active || t.id === c.trainerId).map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                </optgroup>
+                <option value={CANCELLED}>Cancelled</option>
+              </select>
             </label>
-          : <span className="rc-stage-control rc-stage-static" data-stage={stageKey(c.stage)}><span className="rc-stage-dot" aria-hidden="true"/>{c.stage}</span>}
+          : <span className="rc-stage-control rc-stage-static" data-stage={status.toLowerCase()}><span className="rc-stage-dot" aria-hidden="true"/>{status}</span>}
         {admin && <ClientBioEditor client={c} pending={pending} run={run}/>}
       </div>
     </section>

@@ -8,6 +8,7 @@ import {activityLabels} from "./StaffApp";
 import {assignTrainer, sendResetLink, setAccountActive, setClientCancelled, verifyPayment} from "./actions/data";
 import {StaffConversation} from "./Conversation";
 import type {ClientDetail as Detail, MemberLog} from "@/lib/store";
+import type {HealthSummary} from "@/lib/health";
 import {DeleteAccount, MemberLogEditor, MembershipEditor} from "./AdminEditors";
 import {StatusPill} from "./StaffApp";
 import {PAYMENTS_ENABLED} from "@/lib/features";
@@ -27,11 +28,41 @@ const formatDate = (iso: string | null) => iso ? new Date(`${iso.length === 10 ?
 
 const shortDate = (label: string) => /^\d{4}-\d{2}-\d{2}$/.test(label) ? formatDate(label).replace(/ \d{4}$/, "") : label;
 
+const average = (values: (number | null)[]) => {
+  const known = values.filter((v): v is number => v !== null);
+  return known.length ? Math.round(known.reduce((a, b) => a + b, 0) / known.length) : null;
+};
+const hm = (min: number | null) => min === null ? "—" : `${Math.floor(min / 60)}h ${min % 60}m`;
+
+/** Daily totals the member's phone synced from Health Connect / Apple Health (and any band connected to it), last 14 days. */
+function PhoneHealth({health, firstName}: {health: HealthSummary; firstName: string}) {
+  const {days, lastSync, platform, sources} = health;
+  if (!lastSync) return <section className="card"><div className="section-top"><h2>Phone &amp; band data</h2><span className="pill">NOT CONNECTED</span></div>
+    <p className="small-note">{firstName} hasn’t connected Health Connect or Apple Health in the RepCount app yet. Once they do, daily steps, sleep, resting heart rate and workouts from their phone or fitness band appear here.</p></section>;
+  const week = days.slice(-7);
+  const steps = days.filter(d => d.steps !== null).map(d => ({label: shortDate(d.day), value: d.steps!}));
+  const workouts = week.reduce((n, d) => n + (d.workouts ?? 0), 0);
+  const from = platform === "ios" ? "Apple Health" : "Health Connect";
+  return <section className="card rc-detail-weight">
+    <div className="section-top"><h2>Phone &amp; band data</h2><span className="pill">SYNCED {formatDate(lastSync.slice(0, 10)).toUpperCase()}</span></div>
+    <p className="small-note">From {from}{sources.length ? ` · ${sources.join(", ")}` : ""}. Daily totals for the last 14 days; averages are over the last 7.</p>
+    <dl className="rc-detail-list rc-detail-two">
+      <div><dt>Steps a day</dt><dd>{average(week.map(d => d.steps))?.toLocaleString("en-IN") ?? "—"}</dd></div>
+      <div><dt>Sleep a night</dt><dd>{hm(average(week.map(d => d.sleepMin)))}</dd></div>
+      <div><dt>Resting heart rate</dt><dd>{average(week.map(d => d.restingHr)) ?? "—"}{average(week.map(d => d.restingHr)) !== null && " bpm"}</dd></div>
+      <div><dt>Workouts recorded</dt><dd>{workouts} in 7 days</dd></div>
+      <div><dt>Active energy</dt><dd>{average(week.map(d => d.activeKcal))?.toLocaleString("en-IN") ?? "—"}{average(week.map(d => d.activeKcal)) !== null && " kcal a day"}</dd></div>
+      <div><dt>Latest weight</dt><dd>{days.findLast(d => d.weightKg !== null)?.weightKg ?? "—"}{days.some(d => d.weightKg !== null) && " kg"}</dd></div>
+    </dl>
+    {steps.length > 1 && <LineChart points={steps} unit="steps" label={`${firstName}’s daily steps from their phone`} color={palette.sage} decimals={0}/>}
+  </section>;
+}
+
 /**
  * One client: profile, membership, coaching, saved progress and history, one `section` at a time with tabs between them.
  * The trainer manages coaching; the admin manages coaching too, and can also edit or delete every other record.
  */
-export default function ClientDetail({viewer, section, detail, trainers, coaching, log = null}: {viewer: "admin" | "trainer"; section?: MemberSection; detail: Detail; trainers: {id: string; name: string}[]; coaching?: Coaching; log?: MemberLog | null}) {
+export default function ClientDetail({viewer, section, detail, trainers, coaching, log = null, health = null}: {viewer: "admin" | "trainer"; section?: MemberSection; detail: Detail; trainers: {id: string; name: string}[]; coaching?: Coaching; log?: MemberLog | null; health?: HealthSummary | null}) {
   const {client: c, state, history, lastSaved, plan, pastWeeks, messages} = detail;
   const admin = viewer === "admin";
   const firstName = c.name.split(" ")[0];
@@ -144,6 +175,8 @@ export default function ClientDetail({viewer, section, detail, trainers, coachin
         {weights.length > 1 && <LineChart points={weights} unit="kg" label={`${c.name} weight trend`} color={palette.red}/>}
       </section>
     </> : <section className="card"><h2>Member app activity</h2><p className="small-note">This client hasn’t been invited to the member app yet, so there are no tracker, workout or meal entries.</p></section>}
+
+    {health && <PhoneHealth health={health} firstName={firstName}/>}
 
     {!coaching && <section className="card rc-detail-weight"><div className="section-top"><h2>This week’s schedule</h2><span className="pill">{plan ? `${plan.filter(Boolean).length} WORKOUTS` : "NOT SCHEDULED"}</span></div>
       {plan ? <dl className="rc-detail-list">{plan.map((w, i) => <div key={i}><dt>{dayNames[i]}</dt><dd>{w ? `${w.title}${w.time ? ` · ${formatTime(w.time)}` : ""}${w.durationMin ? ` · ${w.durationMin} min` : ""}${state?.workout.completedDays.includes(i) ? " · done ✓" : ""}${w.meetingUrl ? " · live link" : ""}` : "Rest"}</dd></div>)}</dl>

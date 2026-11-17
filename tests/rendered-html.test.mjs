@@ -858,3 +858,80 @@ test('a refused email is logged with the provider’s reason; resets are emailed
  await callAction('app/actions/data.ts', 'saveEmailSettings', [{apiKey: '', from: 'RepCount <team@example.com>', removeKey: true}], admin, '/admin');
  assert.match(readableText(await (await visit('/admin?tab=settings', admin)).text()), /NOT SET UP/);
 });
+
+const mobile = (path, {token, method, body, ip = '10.40.0.1'} = {}) => fetch(baseUrl + '/api/mobile/' + path, {
+ method: method ?? (body === undefined ? 'GET' : 'POST'),
+ headers: {'x-forwarded-for': ip, ...(body === undefined ? {} : {'content-type': 'application/json'}), ...(token ? {authorization: `Bearer ${token}`} : {})},
+ body: body === undefined ? undefined : JSON.stringify(body),
+});
+/** A member of trainer Akif with a known password, created just for the app tests. */
+async function appMember(id, email) {
+ const {randomBytes, scryptSync} = await import('node:crypto');
+ const salt = randomBytes(16).toString('hex');
+ await sql`insert into users (id, email, name, initials, role, password_hash) values (${'u-' + id}, ${email}, 'Appy Member', 'AM', 'member', ${`scrypt$${salt}$${scryptSync('App#member2026', salt, 64).toString('hex')}`})`;
+ await sql`insert into clients (id, user_id, name, initials, stage, trainer_id, goal, email, intake) values (${'c-' + id}, ${'u-' + id}, 'Appy M.', 'AM', 'Active', 'u-trainer-akif', 'Build strength', ${email}, ${sql.json({place: 'At home', days: '3 days a week'})})`;
+ const signIn = await mobile('session', {body: {email, password: 'App#member2026'}, ip: `10.41.0.${id.length}`});
+ assert.equal(signIn.status, 200);
+ return (await signIn.json()).token;
+}
+const istDay = (plus = 0) => new Date(Date.now() + 5.5 * 36e5 + plus * 864e5).toISOString().slice(0, 10);
+
+test('the mobile app signs members in with a token that works only as a bearer token', async () => {
+ assert.equal((await mobile('session', {body: {email: 'trainer@repcount.demo', password: 'Trainer#2026'}})).status, 403, 'The app is for members only');
+ const token = await appMember('app-one', 'app1@example.com');
+ assert.equal((await mobile('session', {body: {email: 'app1@example.com', password: 'wrong'}})).status, 401);
+ assert.equal((await mobile('me')).status, 401, 'No token, no data');
+ const me = await (await mobile('me', {token})).json();
+ assert.equal(me.user.name, 'Appy Member');
+ assert.equal(me.member.goal, 'Build strength');
+ assert.ok(me.coach, 'The assigned trainer is included');
+ assert.equal(typeof me.revision, 'number');
+ assert.match((await visit('/member/overview', 'rc_session=' + token)).headers.get('location') ?? '', /\/login$/, 'An app token is not a website session');
+});
+
+test('phone health data syncs from the app and shows on the trainer’s progress page', async () => {
+ const token = await appMember('app-two', 'app2@example.com');
+ const trainer = await sessionCookie('u-trainer-akif', 'trainer');
+ assert.match(readableText(await (await visit('/trainer/clients/c-app-two/progress', trainer)).text()), /Phone &amp; band data NOT CONNECTED/);
+ const days = [{day: istDay(-1), steps: 7200, sleepMin: 420, restingHr: 62, workouts: 1}, {day: istDay(), steps: 8400, sleepMin: 400, restingHr: 60, weightKg: 81.24}, {day: istDay(5), steps: 99}];
+ const sync = await mobile('health', {token, body: {platform: 'android', days, sources: ['Mi Fitness']}});
+ assert.deepEqual(await sync.json(), {saved: 2}, 'Days in the future are ignored');
+ assert.equal((await mobile('health', {token, body: {platform: 'windows', days}})).status, 400);
+ const page = readableText(await (await visit('/trainer/clients/c-app-two/progress', trainer)).text());
+ assert.match(page, /From Health Connect · Mi Fitness/);
+ assert.match(page, /Steps a day 7,800/);
+ assert.match(page, /Sleep a night 6h 50m/);
+ assert.match(page, /Latest weight 81\.2 kg/);
+});
+
+test('members save progress, ask questions and delete their own account from the app', async () => {
+ const token = await appMember('app-three', 'app3@example.com');
+ const me = await (await mobile('me', {token})).json();
+ const state = {...me.state, tracker: {...me.state.tracker, water: 4}, checkin: {submitted: true, energy: 'High', planFit: 'Manageable'}};
+ assert.equal((await mobile('progress', {token, method: 'PUT', body: {state, revision: me.revision}})).status, 200);
+ const [client] = await sql`select stage, checkin_note from clients where id = 'c-app-three'`;
+ assert.deepEqual({...client}, {stage: 'Check-in due', checkin_note: 'Energy high · manageable'});
+ await sql`update member_state set revision = revision + 1 where user_id = 'u-app-three'`;
+ assert.equal((await mobile('progress', {token, method: 'PUT', body: {state, revision: me.revision}})).status, 409, 'A save over the admin’s correction is refused');
+ const asked = await mobile('messages', {token, body: {body: 'Can I swap squats for lunges?'}});
+ assert.equal((await asked.json()).messages.at(-1).body, 'Can I swap squats for lunges?');
+ await mobile('health', {token, body: {platform: 'ios', days: [{day: istDay(), steps: 100}]}});
+
+ assert.equal((await mobile('account', {token, method: 'DELETE', body: {password: 'nope'}})).status, 403);
+ assert.equal((await mobile('account', {token, method: 'DELETE', body: {password: 'App#member2026'}})).status, 200);
+ const [left] = await sql`select (select count(*) from users where id = 'u-app-three')::int as users, (select count(*) from clients where id = 'c-app-three')::int as clients,
+   (select count(*) from health_daily where user_id = 'u-app-three')::int as health, (select count(*) from messages where client_id = 'c-app-three')::int as messages`;
+ assert.deepEqual({...left}, {users: 0, clients: 0, health: 0, messages: 0}, 'Everything about the member is gone');
+ assert.equal((await mobile('me', {token})).status, 401);
+});
+
+test('the admin sets a client’s status to unassigned, assigned or cancelled only', async () => {
+ const html = await (await visit('/admin/clients/c-kabir', await sessionCookie('u-admin', 'admin'))).text();
+ const select = /<select[^>]*aria-label="Status for [^"]*"[^>]*>([\s\S]*?)<\/select>/.exec(html)?.[1] ?? '';
+ const options = [...select.matchAll(/<option[^>]*>([^<]*)<\/option>/g)].map(m => m[1]);
+ assert.equal(options[0], 'Unassigned');
+ assert.equal(options.at(-1), 'Cancelled');
+ assert.ok(options.length >= 3, 'Each active trainer is offered under “Assigned to”');
+ assert.match(select, /<optgroup label="Assigned to">/);
+ assert.doesNotMatch(markupOnly(html), /Payment review|aria-label="Stage for/, 'The old stages are not offered');
+});

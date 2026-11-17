@@ -4,6 +4,8 @@ import {istToday} from "@/lib/dates";
 import {daySlugs, planningWeeks} from "@/lib/schedule";
 import {clientDetail, confirmedDays, getMemberLog, getNutritionPlan, getWeekPlans} from "@/lib/store";
 import {listTrainers} from "@/lib/users";
+import {healthForClient} from "@/lib/health";
+import {shiftDay} from "@/lib/streak";
 import ClientDetail, {type MemberSection} from "./ClientDetail";
 
 /**
@@ -21,16 +23,17 @@ export async function memberPage(viewer: "trainer" | "admin", id: string, sectio
   const day = at.day === undefined ? undefined : daySlugs.indexOf(at.day);
   if (at.day !== undefined && (!week || day === -1)) notFound();
   // Everything loads in one go (the database is a long round trip away); nothing is shown until access is checked.
-  const [detail, plans, nutrition, confirmed, trainers, log] = await Promise.all([
+  const [detail, plans, nutrition, confirmed, trainers, log, health] = await Promise.all([
     clientDetail(id),
     section === "workouts" ? getWeekPlans([id], weeks.map(w => w.start)) : {},
     section === "overview" || section === "nutrition" ? getNutritionPlan(id) : null,
     section === "overview" ? confirmedDays(id, weekStart, today) : [],
     admin ? listTrainers() : [],
     admin && section === "progress" ? getMemberLog(id) : null,
+    section === "progress" ? healthForClient(id, shiftDay(today, -13)) : null,
   ]);
   if (!detail || (!admin && detail.client.trainerId !== user.id)) notFound();
   // The sidebar, header and tabs around this come from the [id] layout (ClientShell), so only this part loads per section.
-  return <ClientDetail viewer={viewer} section={section} detail={detail} log={log} trainers={trainers.filter(t => t.active || t.id === detail.client.trainerId).map(t => ({id: t.id, name: t.name}))}
+  return <ClientDetail viewer={viewer} section={section} detail={detail} log={log} health={health} trainers={trainers.filter(t => t.active || t.id === detail.client.trainerId).map(t => ({id: t.id, name: t.name}))}
     coaching={{weeks, plans, nutrition, confirmed, today, week: week ?? weeks[0].start, day}}/>;
 }

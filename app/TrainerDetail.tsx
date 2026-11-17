@@ -56,10 +56,9 @@ export default function TrainerDetail({trainer: t, clients}: {trainer: TrainerSt
     <section className="card">
       <div className="section-top"><h2>{t.name.split(" ")[0]}’s clients</h2><span className="pill">{clients.length} CLIENT{clients.length === 1 ? "" : "S"}</span></div>
       {clients.length === 0 ? <p className="rc-staff-empty">No clients assigned yet. Assign clients from the Clients page.</p>
-        : <div className="table-scroll"><table className="rc-cards"><thead><tr><th>Client</th><th>Stage</th><th>This week</th><th>Last workout</th><th>{PAYMENTS_ENABLED ? "Payment" : "Status"}</th></tr></thead><tbody>
+        : <div className="table-scroll"><table className="rc-cards"><thead><tr><th>Client</th><th>This week</th><th>Last workout</th><th>{PAYMENTS_ENABLED ? "Payment" : "Status"}</th></tr></thead><tbody>
           {clients.map(c => <tr key={c.id}>
             <td data-label="Client"><Link className="client-name rc-client-link" href={`/admin/clients/${c.id}`}><span className="avatar">{c.initials}</span><span><b>{c.name}</b>{c.email && <small>{c.email}</small>}</span></Link></td>
-            <td data-label="Stage"><span className="rc-stage-pill" data-stage={key(c.stage)}>{c.stage}</span></td>
             <td data-label="This week">{c.weekPlanned ? <><progress max={c.weekPlanned} value={c.weekDone} aria-label={`${c.name}: ${c.weekDone} of ${c.weekPlanned} workouts done this week`}/><small>{c.weekDone} of {c.weekPlanned} workouts</small></> : <small className="rc-muted">No plan this week</small>}</td>
             <td data-label="Last workout">{c.lastWorkout}</td>
             {PAYMENTS_ENABLED ? <td data-label="Payment"><span className="rc-pay-status" data-status={key(paymentStatus(c))}>{paymentStatus(c)}</span></td> : <td data-label="Status"><StatusPill client={c}/></td>}

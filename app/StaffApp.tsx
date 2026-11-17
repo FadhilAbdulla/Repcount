@@ -46,13 +46,13 @@ const headings: Record<string, [string, string]> = {
 };
 
 export const activityLabels: Record<string, string> = {update_whatsapp: "WhatsApp number changed", add_post: "Blog post added", edit_post: "Blog post edited", delete_post: "Blog post deleted", cancel_membership: "Membership cancelled", restore_membership: "Membership restored", assign_trainer: "Trainer assigned", verify_payment: "Payment verified", review_checkin: "Check-in reviewed", update_settings: "Settings updated", add_trainer: "Trainer added", edit_trainer: "Trainer edited", edit_client: "Client details edited", schedule_week: "Week scheduled", confirm_session: "Session completed", unconfirm_session: "Session completion removed", save_nutrition: "Nutrition plan saved", set_meeting_link: "Call link updated", add_client: "Client added", set_stage: "Stage changed", deactivate_user: "Account deactivated", reactivate_user: "Account reactivated", self_register: "Registered online", ask_coach: "Question sent", reply_member: "Reply sent", send_reset_link: "Reset link sent", edit_membership: "Membership edited", edit_member_log: "Member log corrected", delete_client: "Client deleted", delete_trainer: "Trainer deleted", delete_admin: "Admin deleted", delete_message: "Message removed", add_admin: "Admin added", edit_admin: "Admin edited", change_password: "Password changed", edit_email_settings: "Email settings changed", complete_onboarding: "Onboarding answered"};
-const stageOrder = ["Payment review", "Onboarding", "Check-in due", "Active"];
+const statusOrder = ["Unassigned", "Assigned", "Cancelled"];
 const sorters: Record<string, (a: ClientRow, b: ClientRow) => number> = {
   Name: (a, b) => a.name.localeCompare(b.name),
   Trainer: (a, b) => (a.trainer === "Unassigned" ? 1 : 0) - (b.trainer === "Unassigned" ? 1 : 0) || a.trainer.localeCompare(b.trainer) || a.name.localeCompare(b.name),
   Newest: (a, b) => (b.joinedOn ?? "").localeCompare(a.joinedOn ?? "") || a.name.localeCompare(b.name),
   "Progress (high to low)": (a, b) => b.progress - a.progress || b.weekPlanned - a.weekPlanned || a.name.localeCompare(b.name),
-  Stage: (a, b) => stageOrder.indexOf(a.stage) - stageOrder.indexOf(b.stage) || a.name.localeCompare(b.name),
+  Status: (a, b) => statusOrder.indexOf(clientStatus(a)) - statusOrder.indexOf(clientStatus(b)) || a.name.localeCompare(b.name),
 };
 const emptyTrainer = {name: "", email: "", title: "Trainer", password: ""};
 const emptyClient = {name: "", email: "", phone: "", goal: "", trainerId: "", password: ""};
@@ -72,7 +72,6 @@ export default function StaffApp({area: role, user, clients, settings, activity,
   const router = useRouter();
   const admin = role === "admin";
   const [tab, setTab] = useState(initialTab && tabs[role].some(([key]) => key === initialTab) ? initialTab : tabs[role][0][0]);
-  const [filter, setFilter] = useState("All stages");
   const [trainerFilter, setTrainerFilter] = useState("All trainers");
   const [statusFilter, setStatusFilter] = useState("All statuses");
   const [sort, setSort] = useState("Name");
@@ -97,10 +96,10 @@ export default function StaffApp({area: role, user, clients, settings, activity,
   const search = query.trim().toLowerCase();
   const matches = (c: ClientRow) => !search || [c.name, c.email ?? "", c.phone ?? ""].some(v => v.toLowerCase().includes(search));
   const visible = clients
-    .filter(c => matches(c) && (filter === "All stages" || c.stage === filter) && (statusFilter === "All statuses" || clientStatus(c) === statusFilter) && (trainerFilter === "All trainers" || (trainerFilter === "Unassigned" ? !c.trainerId : c.trainerId === trainerFilter)))
+    .filter(c => matches(c) && (statusFilter === "All statuses" || clientStatus(c) === statusFilter) && (trainerFilter === "All trainers" || (trainerFilter === "Unassigned" ? !c.trainerId : c.trainerId === trainerFilter)))
     .sort(sorters[sort]);
-  const filtered = query !== "" || filter !== "All stages" || trainerFilter !== "All trainers" || statusFilter !== "All statuses";
-  const clearFilters = () => {setQuery(""); setFilter("All stages"); setTrainerFilter("All trainers"); setStatusFilter("All statuses");};
+  const filtered = query !== "" || trainerFilter !== "All trainers" || statusFilter !== "All statuses";
+  const clearFilters = () => {setQuery(""); setTrainerFilter("All trainers"); setStatusFilter("All statuses");};
   const openTab = (key: string) => {
     setNotice("");
     if (detail) { router.push(`/${role}?tab=${key}`); return; }
@@ -120,7 +119,6 @@ export default function StaffApp({area: role, user, clients, settings, activity,
     <div className="section-top"><h2>{admin ? "All clients" : "Your assigned members"}</h2><span className="pill">{visible.length} SHOWN</span></div>
     <div className="filters rc-roster-filters">
       <input type="search" aria-label="Search clients by name" placeholder="Search by name…" value={query} onChange={e => setQuery(e.target.value)}/>
-      <select aria-label="Filter clients by stage" value={filter} onChange={e => setFilter(e.target.value)}><option>All stages</option><option>Active</option><option>Onboarding</option><option>Check-in due</option>{admin && (PAYMENTS_ENABLED || clients.some(c => c.stage === "Payment review")) && <option>Payment review</option>}</select>
       {admin && <select aria-label="Filter clients by status" value={statusFilter} onChange={e => setStatusFilter(e.target.value)}><option>All statuses</option>{clientStatuses.map(s => <option key={s}>{s}</option>)}</select>}
       {admin && <>
         <select aria-label="Filter clients by trainer" value={trainerFilter} onChange={e => setTrainerFilter(e.target.value)}><option>All trainers</option>{trainers.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}<option>Unassigned</option></select>
@@ -128,10 +126,9 @@ export default function StaffApp({area: role, user, clients, settings, activity,
       </>}
       {filtered && <button type="button" className="small-button" onClick={clearFilters}>Clear filters</button>}
     </div>
-    <div className="table-scroll"><table className="rc-cards"><thead><tr><th>Client</th><th>Stage</th>{admin ? <th>Trainer</th> : <th>Goal</th>}<th>This week</th><th>{admin ? "Joined" : "Last workout"}</th>{admin && <th>Status</th>}</tr></thead><tbody>
+    <div className="table-scroll"><table className="rc-cards"><thead><tr><th>Client</th>{admin ? <th>Trainer</th> : <th>Goal</th>}<th>This week</th><th>{admin ? "Joined" : "Last workout"}</th>{admin && <th>Status</th>}</tr></thead><tbody>
       {visible.map(c => <tr key={c.id}>
-        <td data-label="Client"><Link className="client-name rc-client-link" href={clientHref(c)}><span className="avatar">{c.initials}</span><span><b>{c.name}</b>{c.email && <small>{c.email}</small>}</span></Link></td>
-        <td data-label="Stage"><span className="rc-stage-pill" data-stage={paymentKey(c.stage)}>{c.stage}</span>{!c.intake && <span className="pill rc-pill-warn" title="Profile completes when the member answers the onboarding questions">Profile incomplete</span>}</td>
+        <td data-label="Client"><Link className="client-name rc-client-link" href={clientHref(c)}><span className="avatar">{c.initials}</span><span><b>{c.name}</b>{c.email && <small>{c.email}</small>}</span></Link>{!c.intake && <span className="pill rc-pill-warn" title="Profile completes when the member answers the onboarding questions">Profile incomplete</span>}</td>
         {admin
           ? <td data-label="Trainer"><select className="rc-inline-select" aria-label={`Trainer for ${c.name}`} value={c.trainerId ?? ""} disabled={pending} onChange={e => {const trainerId = e.target.value; run(() => assignTrainer(c.id, trainerId));}}><option value="">Unassigned</option>{trainers.filter(t => t.active || t.id === c.trainerId).map(t => <option key={t.id} value={t.id}>{t.name}{t.active ? "" : " (inactive)"}</option>)}</select></td>
           : <td data-label="Goal">{c.goal}</td>}
@@ -141,12 +138,12 @@ export default function StaffApp({area: role, user, clients, settings, activity,
         <td data-label={admin ? "Joined" : "Last workout"}>{admin ? formatDate(c.joinedOn) : c.lastWorkout}</td>
         {admin && <td data-label="Status"><StatusPill client={c}/></td>}
       </tr>)}
-      {visible.length === 0 && <tr className="member-empty-row"><td colSpan={admin ? 6 : 5} data-label="">{clients.length === 0 ? "No clients yet." : "No clients match this view. Try another filter or search."}</td></tr>}
+      {visible.length === 0 && <tr className="member-empty-row"><td colSpan={admin ? 5 : 4} data-label="">{clients.length === 0 ? "No clients yet." : "No clients match this view. Try another filter or search."}</td></tr>}
     </tbody></table></div>
   </section>;
 
   const addClientModal = <Modal open={addingClient} eyebrow="CLIENTS" title="Add a client" onClose={() => setAddingClient(false)}>
-    <p>Creates their sign-in. They start in payment review and sign in with Google using this email, or with the password you set.</p>
+    <p>Creates their sign-in. They start unassigned until you pick a trainer, and sign in with Google using this email, or with the password you set.</p>
     <form className="rc-modal-form" onSubmit={e => {e.preventDefault(); run(async () => {const result = await addClient(newClient); if (result.ok) {setNewClient(emptyClient); setAddingClient(false);} return result;});}}>
       <label className="field">Full name<input value={newClient.name} onChange={e => setNewClient({...newClient, name: e.target.value})} required maxLength={60} autoComplete="off"/></label>
       <div className="rc-modal-row">
@@ -241,14 +238,14 @@ export default function StaffApp({area: role, user, clients, settings, activity,
   const attention: [number, string, string, string, () => void][] = [
     [PAYMENTS_ENABLED ? awaiting.length : 0, "payment reference to verify", "payment references to verify", "Review payments", () => {setPaymentView("Awaiting verification"); openTab("payments");}],
     [unassigned.length, "client without a trainer", "clients without a trainer", "Assign trainers", () => {setTrainerFilter("Unassigned"); openTab("clients");}],
-    [dueCheckIns.length, "check-in waiting for review", "check-ins waiting for review", "See clients", () => {setFilter("Check-in due"); openTab("clients");}],
+    [dueCheckIns.length, "check-in waiting for review", "check-ins waiting for review", "See clients", () => openTab("clients")],
     [incomplete.length, "client hasn’t finished onboarding", "clients haven’t finished onboarding", "See clients", () => openTab("clients")],
   ];
   const newest = [...clients].sort(sorters.Newest).slice(0, 5);
   const activeTrainers = trainers.filter(t => t.active).length;
   const trainedThisWeek = clients.filter(c => c.weekDone > 0).length;
   const adminMetrics: [string, string, string][] = [
-    [String(clients.length), "Clients", `${clients.filter(c => c.stage === "Active").length} active · ${clients.filter(c => c.stage === "Onboarding").length} onboarding`],
+    [String(clients.length), "Clients", `${clients.filter(c => clientStatus(c) === "Assigned").length} assigned · ${clients.filter(c => clientStatus(c) === "Unassigned").length} unassigned`],
     PAYMENTS_ENABLED ? [money(verifiedCount * Number(settings.price)), "Verified revenue", `${verifiedCount} of ${clients.length} paid`]
       : [String(clients.length - cancelledCount), "Active memberships", `${cancelledCount} cancelled`],
     [String(activeTrainers), "Trainers", `${clients.length - unassigned.length} of ${clients.length} clients assigned`],

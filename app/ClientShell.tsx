@@ -16,5 +16,5 @@ export default async function ClientShell({viewer, id, children}: {viewer: "admi
   const [client, clients, settings, trainers] = await Promise.all([getClient(id), listClients(admin ? undefined : user.id), getSettings(), admin ? trainerAnalytics() : []]);
   if (!client || (!admin && client.trainerId !== user.id)) notFound();
   return <StaffApp area={viewer} user={{name: user.name, initials: user.initials, email: user.email}} clients={clients} settings={settings} activity={[]} trainers={trainers} detailTab="clients"
-    detail={<><ClientHeader viewer={viewer} client={client}/>{children}</>}/>;
+    detail={<><ClientHeader viewer={viewer} client={client} trainers={trainers}/>{children}</>}/>;
 }

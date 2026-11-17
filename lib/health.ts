@@ -62,17 +62,29 @@ export async function saveHealthDays(userId: string, platform: Platform, days: H
   return days.length;
 }
 
+/** A client's synced phone data for their trainer or the admin; null when the client has no member login. */
+export async function healthForClient(clientId: string, since: string): Promise<HealthSummary | null> {
+  const sql = await db();
+  const [row] = await sql<{user_id: string | null}[]>`select user_id from clients where id = ${clientId}`;
+  return row?.user_id ? getHealthDays(row.user_id, since) : null;
+}
+
+/** A member's synced days, plus where the latest sync came from (for staff). */
+export type HealthSummary = {days: HealthDay[]; lastSync: string | null; platform: Platform | null; sources: string[]};
+
 /** The member's synced days since the given date, oldest first, and when the phone last synced. */
-export async function getHealthDays(userId: string, since: string): Promise<{days: HealthDay[]; lastSync: string | null}> {
+export async function getHealthDays(userId: string, since: string): Promise<HealthSummary> {
   const sql = await db();
   const rows = await sql<{day: string; steps: number | null; active_kcal: number | null; resting_hr: number | null; sleep_min: number | null;
-    workouts: number | null; workout_min: number | null; weight_kg: string | null; updated_at: Date}[]>`
-    select day::text as day, steps, active_kcal, resting_hr, sleep_min, workouts, workout_min, weight_kg, updated_at
+    workouts: number | null; workout_min: number | null; weight_kg: string | null; platform: Platform; sources: string[]; updated_at: Date}[]>`
+    select day::text as day, steps, active_kcal, resting_hr, sleep_min, workouts, workout_min, weight_kg, platform, sources, updated_at
     from health_daily where user_id = ${userId} and day >= ${since} order by day`;
-  const last = rows.reduce<Date | null>((a, r) => !a || r.updated_at > a ? r.updated_at : a, null);
+  const last = rows.reduce<(typeof rows)[number] | null>((a, r) => !a || r.updated_at > a.updated_at ? r : a, null);
   return {
     days: rows.map(r => ({day: r.day, steps: r.steps, activeKcal: r.active_kcal, restingHr: r.resting_hr, sleepMin: r.sleep_min,
       workouts: r.workouts, workoutMin: r.workout_min, weightKg: r.weight_kg === null ? null : Number(r.weight_kg)})),
-    lastSync: last?.toISOString() ?? null,
+    lastSync: last?.updated_at.toISOString() ?? null,
+    platform: last?.platform ?? null,
+    sources: last?.sources ?? [],
   };
 }

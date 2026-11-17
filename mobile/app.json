@@ -11,7 +11,6 @@
       "bundleIdentifier": "com.tryrepcount.app",
       "buildNumber": "1",
       "supportsTablet": false,
-      "icon": "./assets/expo.icon",
       "config": {
         "usesNonExemptEncryption": false
       }
@@ -46,7 +45,7 @@
         {
           "backgroundColor": "#FBF7F0",
           "image": "./assets/images/splash-icon.png",
-          "imageWidth": 76
+          "imageWidth": 120
         }
       ],
       [

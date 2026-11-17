@@ -38,7 +38,7 @@ Checks: `npm run typecheck`, `npm run lint`, `npm run doctor`.
 
 1. **Server address.** `expo.extra.apiUrl` in `app.json` is the live site, `https://www.tryrepcount.com`. Use the `www` host: the bare domain redirects there, and a redirect can drop the app's `Authorization` header.
 2. **App IDs.** `com.tryrepcount.app` (`ios.bundleIdentifier`, `android.package` in `app.json`), based on the tryrepcount.com domain. **They can't be changed after the first store upload.**
-3. **Icons and splash.** `assets/images/*` and `assets/expo.icon` are still Expo's defaults. Replace them with the RepCount logo: 1024×1024 icon, Android adaptive foreground/background/monochrome, and splash.
+3. **Icons and splash.** Done: the red RepCount R on cream, matching the website. `assets/images/icon.png` (1024, iOS and stores), the Android adaptive foreground/background/monochrome images, and `splash-icon.png`. To change them, edit `public/repcount-mark.svg` and re-render.
 4. **Expo account.** `npx eas-cli@latest login`, then `npx eas-cli@latest init` (adds the project ID to `app.json`).
 
 ## Google Play
@@ -65,7 +65,6 @@ Checks: `npm run typecheck`, `npm run lint`, `npm run doctor`.
 
 ## Known gaps (next steps)
 
-- Trainers can't see synced health data on the website yet (`health_daily` is stored but not shown).
 - No push notifications yet. Emails still go out as before.
 - Onboarding, nutrition, check-in and the leaderboard are still website-only. The app links to onboarding.
 - Health data syncs only while the app is open. Background sync needs extra permissions and review.
