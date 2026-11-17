@@ -8,25 +8,29 @@ import type {PlannedWorkout, WeekPlan} from "./schedule";
 import {currency, type Bio} from "./programme";
 import {sanitizeNutritionPlan, type NutritionPlan} from "./nutritionPlan";
 import {scoreFor, shiftDay, streakFrom, type LeaderboardRow} from "./streak";
+import {PAYMENTS_ENABLED} from "./features";
 
 export type ClientRow = {
   id: string; name: string; initials: string; stage: string; trainerId: string | null; trainer: string; paid: boolean; progress: number;
   goal: string; lastWorkout: string; lastWorkoutOn: string | null; nextCheckIn: string; reference: string | null; checkinNote: string | null;
   email: string | null; phone: string | null; joinedOn: string | null; userId: string | null; accountActive: boolean | null; meetingUrl: string | null;
   intake: Intake | null; bio: Bio | null; memberNo: number;
+  /** The admin cancelled this membership. */
+  cancelled: boolean;
   /** This week's planned workouts and how many were done (marked by the member or confirmed by the trainer). progress = done ÷ planned. */
   weekPlanned: number; weekDone: number;
 };
 /** What a member told us when they registered. */
 export type Intake = {place: string; days: string};
 export {currency, stages} from "./programme";
-export type Settings = {price: string; currency: typeof currency};
+/** whatsapp: digits only with country code (e.g. 971501234567), or "" when the website button is off. */
+export type Settings = {price: string; currency: typeof currency; whatsapp: string};
 
 type RawClient = {
   id: string; user_id: string | null; name: string; initials: string; stage: string; trainer_id: string | null; trainer_name: string | null; paid: boolean; progress: number;
   goal: string; last_workout_on: string | null; next_checkin: string; payment_reference: string | null; checkin_note: string | null;
   email: string | null; phone: string | null; joined_on: string | null; account_active: boolean | null; meeting_url: string | null; intake: Intake | null;
-  bio: Bio | null; member_no: string; planned_days: number[]; member_done: unknown; confirmed_days: number[];
+  bio: Bio | null; member_no: string; cancelled: boolean; planned_days: number[]; member_done: unknown; confirmed_days: number[];
 };
 
 /** "Today", "Yesterday", "3 days ago" relative to today in India time. */
@@ -47,7 +51,7 @@ const toClient = (r: RawClient, today: string): ClientRow => {
     checkinNote: r.checkin_note, email: r.email, phone: r.phone, joinedOn: r.joined_on, userId: r.user_id, accountActive: r.account_active, meetingUrl: r.meeting_url,
     intake: r.intake ? {place: String(r.intake.place ?? ""), days: String(r.intake.days ?? "")} : null,
     bio: r.bio ? {dob: typeof r.bio.dob === "string" ? r.bio.dob : null, gender: typeof r.bio.gender === "string" ? r.bio.gender : null, heightCm: typeof r.bio.heightCm === "number" ? r.bio.heightCm : null} : null,
-    memberNo: Number(r.member_no),
+    memberNo: Number(r.member_no), cancelled: r.cancelled,
   };
 };
 
@@ -57,7 +61,7 @@ const clientSelect = (sql: postgres.Sql) => {
   return sql`
   select c.id, c.user_id, c.name, c.initials, c.stage, c.trainer_id, t.name as trainer_name, c.paid, c.goal,
     c.last_workout_on::text as last_workout_on, c.next_checkin, c.payment_reference, c.checkin_note, c.email, c.phone,
-    c.joined_on::text as joined_on, u.active as account_active, c.meeting_url, c.intake, c.bio, c.member_no,
+    c.joined_on::text as joined_on, u.active as account_active, c.meeting_url, c.intake, c.bio, c.member_no, c.cancelled_at is not null as cancelled,
     coalesce((select array_agg(wp.day) from workout_plans wp where wp.client_id = c.id and wp.week_start = ${weekStart} and wp.title <> '__rest_week__'), '{}') as planned_days,
     case when ms.data->>'weekStart' = ${weekStart} then ms.data->'workout'->'completedDays' else '[]'::jsonb end as member_done,
     coalesce((select array_agg(extract(isodow from sc.day)::int - 1) from session_confirmations sc
@@ -87,7 +91,7 @@ export async function clientByUser(userId: string): Promise<ClientRow | null> {
 export async function createClient(input: {id: string; userId: string; name: string; initials: string; email: string; phone: string | null; goal: string; trainerId: string | null; intake?: Intake}) {
   const sql = await db();
   await sql`insert into clients (id, user_id, name, initials, stage, trainer_id, goal, email, phone, joined_on, intake)
-    values (${input.id}, ${input.userId}, ${input.name}, ${input.initials}, 'Payment review', ${input.trainerId}, ${input.goal}, ${input.email}, ${input.phone}, ${istToday().day}, ${input.intake ? sql.json(input.intake) : null})`;
+    values (${input.id}, ${input.userId}, ${input.name}, ${input.initials}, ${PAYMENTS_ENABLED ? "Payment review" : "Onboarding"}, ${input.trainerId}, ${input.goal}, ${input.email}, ${input.phone}, ${istToday().day}, ${input.intake ? sql.json(input.intake) : null})`;
 }
 
 export async function saveIntake(id: string, goal: string, intake: Intake) {
@@ -105,6 +109,13 @@ export async function verifyPayment(id: string) {
   await sql`update clients set paid = true, stage = case when stage = 'Payment review' then 'Onboarding' else stage end where id = ${id}`;
 }
 
+/** Cancels a membership (status Cancelled) or restores it. */
+export async function setCancelled(id: string, cancelled: boolean) {
+  const sql = await db();
+  const rows = await sql`update clients set cancelled_at = ${cancelled ? sql`now()` : null} where id = ${id} returning id`;
+  return rows.length > 0;
+}
+
 export async function setStage(id: string, stage: string) {
   const sql = await db();
   await sql`update clients set stage = ${stage} where id = ${id}`;
@@ -119,10 +130,10 @@ export async function getSettings(): Promise<Settings> {
   const sql = await db();
   const rows = await sql<{key: string; value: string}[]>`select key, value from settings`;
   const map = Object.fromEntries(rows.map(r => [r.key, r.value]));
-  return {price: map.price ?? "299", currency};
+  return {price: map.price ?? "299", currency, whatsapp: map.whatsapp ?? ""};
 }
 
-export async function updateSettings(next: {price: string}) {
+export async function updateSettings(next: {price?: string; whatsapp?: string}) {
   const sql = await db();
   for (const [key, value] of Object.entries(next)) {
     await sql`insert into settings (key, value) values (${key}, ${value}) on conflict (key) do update set value = excluded.value`;
@@ -316,7 +327,7 @@ export async function saveMemberState(userId: string, input: unknown, revision?:
       // Edits to an already-sent check-in update the note but don't email again.
       if (!sameWeek || !before?.checkin.submitted) result.checkinNote = note;
     }
-    if (state.payment.submitted && (!before?.payment.submitted || before.payment.reference !== state.payment.reference)) {
+    if (PAYMENTS_ENABLED && state.payment.submitted && (!before?.payment.submitted || before.payment.reference !== state.payment.reference)) {
       await tx`update clients set payment_reference = ${state.payment.reference} where id = ${client.id}`;
       result.paymentReference = state.payment.reference;
     }
@@ -374,6 +385,12 @@ export async function updateMembership(clientId: string, input: {paid: boolean; 
   if (!client) return false;
   const sql = await db();
   await sql.begin(async tx => {
+    // While payments are locked (phase 2), only the dates change: payment status, reference and stage are left alone.
+    if (!PAYMENTS_ENABLED) {
+      await tx`update clients set joined_on = ${input.joinedOn}, next_checkin = ${input.nextCheckIn} where id = ${clientId}`;
+      if (client.userId) await patchMemberState(tx, client.userId, s => { s.booking = input.nextCheckIn === "Not booked" || input.nextCheckIn === "—" ? null : input.nextCheckIn; });
+      return;
+    }
     await tx`update clients set paid = ${input.paid}, payment_reference = ${input.reference}, joined_on = ${input.joinedOn}, next_checkin = ${input.nextCheckIn},
       stage = case when ${input.paid} and stage = 'Payment review' then 'Onboarding' when not ${input.paid} and stage <> 'Payment review' then 'Payment review' else stage end
       where id = ${clientId}`;

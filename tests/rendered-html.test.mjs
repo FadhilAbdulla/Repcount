@@ -77,7 +77,8 @@ test('pilot preserves confirmed scope and distinguishes future services', async 
  assert.match(text, /1:1\s+a personal trainer\s+for every client/);
  assert.match(text, /Adults 18\+/);
   assert.match(text, /Weekly trainer follow-ups/);
- assert.match(text, /Manual payment, verified by the team/);
+ assert.match(text, /The team shares payment details when you join/, 'Payments are locked until phase 2');
+ assert.match(text, /Health articles/, 'The home page links to the blog');
  assert.match(text, /personalised nutrition plans are not currently part of the confirmed pilot package/);
  assert.doesNotMatch(text, /psycholog|counsel|therap/i, 'The psychologist service has been withdrawn');
  assert.match(text, /How do I join\?/);
@@ -185,7 +186,8 @@ test('admin can open a client detail page; other roles cannot', async () => {
  const text = readableText(await page.text());
  assert.match(text, /Maya R\./);
  assert.match(text, /maya@example\.com/);
- assert.match(text, /UPI-48213/);
+ assert.match(text, /Payment Coming in phase 2/, 'Payment details are locked until phase 2');
+ assert.match(text, /RC-\d{4}/, 'The client page shows the member ID');
  assert.equal((await visit('/admin/clients/does-not-exist', admin)).status, 404);
  assert.match((await visit('/admin/clients/c-maya', await sessionCookie('u-trainer-akif', 'trainer'))).headers.get('location') ?? '', /\/trainer$/);
  const overview = readableText(await (await visit('/admin', admin)).text());
@@ -247,11 +249,10 @@ test('members see their rank, score and streak on the leaderboard', async () => 
 test('admins see member IDs, profile status and editable trainers', async () => {
  const admin = await sessionCookie('u-admin', 'admin');
  const roster = readableText(await (await visit('/admin?tab=clients', admin)).text());
- assert.match(roster, /RC-\d{4}/);
+ assert.match(roster, /Status/);
  assert.match(roster, /Profile incomplete|No plan this week|workouts/);
  const team = readableText(await (await visit('/admin?tab=trainers', admin)).text());
- assert.match(team, /Add trainer/);
- assert.match(team, /Edit details/);
+ assert.match(team, /Coaching team/);
  assert.doesNotMatch(team, /capacity/i, 'Trainers no longer have a client capacity');
  const detail = readableText(await (await visit('/admin/clients/c-aarav', admin)).text());
  assert.match(detail, /Edit details/);
@@ -324,7 +325,7 @@ test('visitors register, answer the onboarding questions, and staff see their an
  assert.match(answered.headers.get('location') ?? answered.headers.get('x-action-redirect') ?? '', /\/member\/overview/);
  const [client] = await sql`select c.id, c.stage, c.goal, c.intake, u.role from clients c join users u on u.id = c.user_id where c.email = 'lina@example.com'`;
  assert.equal(client.role, 'member');
- assert.equal(client.stage, 'Payment review');
+ assert.equal(client.stage, 'Onboarding', 'With payments locked, new members skip payment review');
  assert.equal(client.goal, 'Improve mobility');
  assert.deepEqual(client.intake, {place: 'At a gym', days: '2 days a week'});
  assert.match((await visit('/onboarding', cookie)).headers.get('location') ?? '', /\/member\/overview$/, 'Onboarding is asked once');
@@ -559,23 +560,71 @@ test('the admin plans workouts, call links, sessions and nutrition for any clien
  assert.match((await callAction('app/actions/data.ts', 'saveMeetingLink', ['c-riya', 'https://zoom.us/j/1'], await sessionCookie('u-trainer-akif', 'trainer'), '/trainer/clients/c-aarav/workouts')).error ?? '', /isn’t assigned to you/);
 });
 
-test('the admin edits membership: payment, reference, join date and next check-in', async () => {
+test('the admin edits membership dates; payments stay locked until phase 2', async () => {
  const admin = await sessionCookie('u-admin', 'admin');
- const maya = await callAction('app/actions/data.ts', 'editMembership', ['c-maya', {paid: true, reference: 'UPI-77777', joinedOn: '2026-10-01', nextCheckIn: 'Sat · 9:00 AM'}], admin, '/admin/clients/c-maya');
+ const [m0] = await sql`select paid, stage, payment_reference from clients where id = 'c-maya'`;
+ const maya = await callAction('app/actions/data.ts', 'editMembership', ['c-maya', {paid: !m0.paid, reference: 'UPI-77777', joinedOn: '2026-10-01', nextCheckIn: 'Sat · 9:00 AM'}], admin, '/admin/clients/c-maya');
  assert.match(maya.ok ?? JSON.stringify(maya), /membership saved/);
  const [m] = await sql`select paid, stage, payment_reference, joined_on::text as joined, next_checkin from clients where id = 'c-maya'`;
- assert.deepEqual({...m}, {paid: true, stage: 'Onboarding', payment_reference: 'UPI-77777', joined: '2026-10-01', next_checkin: 'Sat · 9:00 AM'});
+ assert.deepEqual({...m}, {paid: m0.paid, stage: m0.stage, payment_reference: m0.payment_reference, joined: '2026-10-01', next_checkin: 'Sat · 9:00 AM'}, 'Only the dates change while payments are locked');
  assert.match((await callAction('app/actions/data.ts', 'editMembership', ['c-maya', {paid: true, reference: '', joinedOn: '01/10/2026', nextCheckIn: ''}], admin, '/admin/clients/c-maya')).error ?? '', /valid join date/);
+ assert.match((await callAction('app/actions/data.ts', 'verifyPayment', ['c-maya'], admin, '/admin')).error ?? '', /phase 2/);
  // For a member with an account, the change reaches their app too.
  const [{revision: before}] = await sql`select revision from member_state where user_id = 'u-member-kabir'`.then(r => r.length ? r : [{revision: 0}]);
  await callAction('app/actions/data.ts', 'editMembership', ['c-kabir', {paid: false, reference: 'BANK-123', joinedOn: '2026-10-20', nextCheckIn: 'Mon · 7:00 PM'}], admin, '/admin/clients/c-kabir');
- const [k] = await sql`select c.paid, c.stage, ms.data->>'booking' as booking, ms.data->'payment'->>'reference' as reference, ms.revision from clients c join member_state ms on ms.user_id = c.user_id where c.id = 'c-kabir'`;
- assert.equal(k.paid, false);
- assert.equal(k.stage, 'Payment review', 'Un-verifying moves the client back to payment review');
+ const [k] = await sql`select ms.data->>'booking' as booking, ms.revision from clients c join member_state ms on ms.user_id = c.user_id where c.id = 'c-kabir'`;
  assert.equal(k.booking, 'Mon · 7:00 PM');
- assert.equal(k.reference, 'BANK-123');
  assert.ok(k.revision > before);
  assert.equal((await callAction('app/actions/data.ts', 'editMembership', ['c-maya', {paid: false, reference: '', joinedOn: '', nextCheckIn: ''}], await sessionCookie('u-trainer-akif', 'trainer'), '/admin/clients/c-maya')).ok, undefined);
+ // The admin Payments page shows the locked state.
+ assert.match(await (await visit('/admin?tab=payments', admin)).text(), /Payments are locked for now/);
+});
+
+test('client status is Unassigned, Assigned or Cancelled, and the admin can cancel and restore a membership', async () => {
+ const admin = await sessionCookie('u-admin', 'admin');
+ const page = await (await visit('/admin?tab=clients', admin)).text();
+ assert.match(page, /data-status="assigned"/);
+ const cancelled = await callAction('app/actions/data.ts', 'setClientCancelled', ['c-maya', true], admin, '/admin/clients/c-maya');
+ assert.match(cancelled.ok ?? JSON.stringify(cancelled), /cancelled/);
+ assert.match(await (await visit('/admin/clients/c-maya', admin)).text(), /Restore membership/);
+ assert.match((await callAction('app/actions/data.ts', 'setClientCancelled', ['c-maya', false], admin, '/admin/clients/c-maya')).ok ?? '', /restored/);
+ const [row] = await sql`select cancelled_at from clients where id = 'c-maya'`;
+ assert.equal(row.cancelled_at, null);
+ assert.equal((await callAction('app/actions/data.ts', 'setClientCancelled', ['c-maya', true], await sessionCookie('u-trainer-akif', 'trainer'), '/admin/clients/c-maya')).ok, undefined, 'Only admins cancel');
+});
+
+test('the blog: starter articles, admin publishing, SEO pages and the WhatsApp button', async () => {
+ const admin = await sessionCookie('u-admin', 'admin');
+ const list = await visit('/blog');
+ assert.equal(list.status, 200);
+ const listHtml = await list.text();
+ assert.match(listHtml, /How much protein do you need/);
+ assert.doesNotMatch(listHtml, /noindex/, 'The blog is indexable');
+ const article = await (await visit('/blog/how-much-protein-do-you-need')).text();
+ assert.match(article, /application\/ld\+json/);
+ assert.match(article, /rel="canonical"[^>]*\/blog\/how-much-protein-do-you-need/);
+ assert.equal((await visit('/blog/not-a-real-post')).status, 404);
+
+ const saved = await callAction('app/actions/data.ts', 'savePost', [null, {title: 'Test draft article', slug: '', excerpt: 'A draft.', body: 'Draft body text that is long enough.', coverUrl: '', published: false}], admin, '/admin?tab=blog');
+ assert.match(saved.ok ?? JSON.stringify(saved), /draft/);
+ assert.equal((await visit('/blog/test-draft-article')).status, 404, 'Drafts are not public');
+ const [post] = await sql`select id from posts where slug = 'test-draft-article'`;
+ await callAction('app/actions/data.ts', 'savePost', [Number(post.id), {title: 'Test draft article', slug: 'test-draft-article', excerpt: 'Now live.', body: '## Hello\n\nSome **bold** text and <script>alert(1)</script>.', coverUrl: '', published: true}], admin, '/admin?tab=blog');
+ const live = await (await visit('/blog/test-draft-article')).text();
+ assert.match(live, /<h2>Hello<\/h2>/);
+ assert.match(live, /<strong>bold<\/strong>/);
+ assert.doesNotMatch(live, /<script>alert/, 'Raw HTML in an article is escaped');
+ assert.match((await callAction('app/actions/data.ts', 'savePost', [null, {title: 'Duplicate', slug: 'test-draft-article', excerpt: '', body: 'Another body long enough.', coverUrl: '', published: true}], admin, '/admin?tab=blog')).error ?? '', /already uses/);
+ assert.match(await (await visit('/sitemap.xml')).text(), /\/blog\/test-draft-article/);
+ assert.match(await (await visit('/robots.txt')).text(), /Disallow: \/admin/);
+ assert.match((await callAction('app/actions/data.ts', 'deletePost', [Number(post.id)], admin, '/admin?tab=blog')).ok ?? '', /deleted/);
+
+ assert.doesNotMatch(await (await visit('/')).text(), /wa\.me\//, 'No WhatsApp button until a number is set');
+ assert.match((await callAction('app/actions/data.ts', 'saveWhatsApp', [{number: '12'}], admin, '/admin?tab=settings')).error ?? '', /country code/);
+ await callAction('app/actions/data.ts', 'saveWhatsApp', [{number: '+971 50 123 4567'}], admin, '/admin?tab=settings');
+ assert.match(await (await visit('/')).text(), /wa\.me\/971501234567/);
+ assert.match(await (await visit('/blog')).text(), /wa\.me\/971501234567/);
+ await callAction('app/actions/data.ts', 'saveWhatsApp', [{number: ''}], admin, '/admin?tab=settings');
 });
 
 test('the admin corrects a member’s own log, and the member’s stale app can’t overwrite it', async () => {
@@ -641,7 +690,8 @@ test('the admin permanently deletes a trainer; their members become unassigned',
  assert.match(deleted.ok ?? JSON.stringify(deleted), /Their members are now unassigned/);
  assert.equal((await sql`select count(*)::int as n from users where id = ${nora.id}`)[0].n, 0);
  assert.equal((await sql`select trainer_id from clients where id = 'c-neha'`)[0].trainer_id, null);
- assert.match(readableText(await (await visit('/admin?tab=trainers', admin)).text()), /Delete trainer permanently/);
+ const [akif] = await sql`select id from users where email = 'trainer@repcount.demo'`;
+ assert.match(readableText(await (await visit(`/admin/trainers/${akif.id}`, admin)).text()), /Delete trainer permanently/);
 });
 
 test('admins manage admin accounts, but never deactivate themselves', async () => {
@@ -752,7 +802,6 @@ test('the admin sets up email in Settings; the API key is stored encrypted', asy
 });
 
 test('members, trainers and admins get emails for the events that matter to them', async () => {
- const admin = await sessionCookie('u-admin', 'admin');
  const akif = await currentCookie('u-trainer-akif', 'trainer');
  const aarav = await currentCookie('u-member-aarav', 'member');
  const inbox = (to, subject) => waitFor(() => mailbox.find(m => m.to[0] === to && subject.test(m.subject)), `${subject} to ${to}`);
@@ -765,10 +814,6 @@ test('members, trainers and admins get emails for the events that matter to them
  await callAction('app/actions/data.ts', 'replyToMember', ['c-aarav', 'Yes, go lighter today.'], akif, '/trainer/clients/c-aarav');
  assert.match((await inbox('member@repcount.demo', /replied on RepCount/)).text, /go lighter today/);
 
- // Maya was verified earlier; mark her unpaid again, then verify.
- await callAction('app/actions/data.ts', 'editMembership', ['c-maya', {paid: false, reference: 'UPI-48213', joinedOn: '', nextCheckIn: ''}], admin, '/admin/clients/c-maya');
- await callAction('app/actions/data.ts', 'verifyPayment', ['c-maya'], admin, '/admin');
- assert.match((await inbox('maya@example.com', /payment is verified/)).text, /membership is active/);
 
  const week = new Date(Date.parse(`${istWeekStart()}T00:00:00Z`) + 21 * 86400000).toISOString().slice(0, 10);
  const plan = [{title: 'Full-body foundations', exercises: ['Squats'], time: '18:00', durationMin: 25, meetingUrl: null}, null, null, null, null, null, null];

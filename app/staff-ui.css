@@ -58,8 +58,10 @@
 .rc-staff .rc-client-link .avatar{background:#f1ede4;color:#5d6056}
 .rc-inline-select{min-height:38px;padding:0 30px 0 10px;border:1px solid #e1ddd3;border-radius:8px;background-color:#fffdf8;font:inherit;font-size:13px;color:#252822;max-width:200px}
 .rc-row-actions{text-align:right;white-space:nowrap}
-.rc-row-actions>*{display:inline-flex;align-items:center;justify-content:center;vertical-align:middle}
-.rc-row-actions>*+*{margin-left:8px}
+.rc-row-actions>:not(dialog){display:inline-flex;align-items:center;justify-content:center;vertical-align:middle}
+.rc-row-actions>:not(dialog)+:not(dialog){margin-left:8px}
+/* Pop-ups opened from a row's actions keep normal text layout, not the cell's right-aligned single line. */
+.rc-row-actions dialog{text-align:left;white-space:normal}
 .rc-staff .rc-row-actions .small-button{min-height:34px;padding:0 12px;font-size:12px;font-weight:600;background:#fffdf8;border-color:#e1ddd3}
 .rc-staff .small-button.dark{background:#252822;border-color:#252822;color:#fff}
 .rc-staff .small-button.rc-danger{color:#c71331;border-color:#f0cfd3}
@@ -149,3 +151,30 @@
 /* Cards that follow each other directly in a page get the same gap as everywhere else. */
 .rc-staff main>.card+.card,.rc-staff main>.card+section.card{margin-top:22px}
 .rc-settings .rc-modal-form{max-width:560px}
+
+/* ---------- Client status: Unassigned, Assigned, Cancelled ---------- */
+[data-status="assigned"]{background:#e6f1e3;color:#2f6b35}
+[data-status="unassigned"]{background:#fbf0dc;color:#94600f}
+[data-status="cancelled"]{background:#eeece7;color:#6b6a66}
+
+/* ---------- Locked feature (Payments until phase 2) ---------- */
+.rc-staff .rc-nav-lock{display:inline-grid;place-items:center;background:transparent!important;color:#9a9a90;padding:0!important}
+.rc-locked{display:flex;flex-direction:column;align-items:flex-start;gap:12px;padding:36px 32px;max-width:640px}
+.rc-locked-icon{display:grid;place-items:center;width:56px;height:56px;border-radius:16px;background:#f1ede4;color:#5d6056}
+.rc-locked h2{margin:4px 0 0}
+.rc-locked p{margin:0;font-size:14px;line-height:1.6;color:#6b6f64}
+.rc-locked .button{margin-top:8px;font-size:13px;font-weight:600}
+
+/* ---------- Blog editor (Admin → Blog) ---------- */
+.rc-blog-new{min-height:40px!important;padding:0 16px!important;font-size:13px!important;font-weight:600;gap:6px!important}
+.rc-staff .section-top h2 .pill{margin-left:10px;vertical-align:middle}
+.rc-blog-intro{margin:0 0 14px!important}
+.rc-blog-slug{display:block;font-size:12px;color:#8a8c81;margin-top:2px}
+.rc-staff a.small-button{display:inline-flex;align-items:center;text-decoration:none;color:inherit}
+.rc-modal .field textarea{display:block;width:100%;margin-top:9px;padding:12px;border:1px solid #d8dece;border-radius:6px;background:#fdfdf8;color:var(--ink);font:inherit;font-size:14px;line-height:1.55;resize:vertical}
+.rc-blog-body{min-height:260px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace!important;font-size:13px!important}
+.rc-input-prefix{display:flex;align-items:center;margin-top:9px;border:1px solid #d8dece;border-radius:6px;background:#fdfdf8;overflow:hidden}
+.rc-input-prefix>span{padding:0 4px 0 12px;color:#8a8c81;font-size:13px}
+.rc-input-prefix input{margin:0!important;border:0!important;padding-left:2px!important}
+.rc-modal:has(.rc-blog-form){width:min(760px,calc(100% - 32px))}
+.rc-blog-form code{font-size:12px;background:#f1ede4;padding:1px 5px;border-radius:4px}

@@ -5,7 +5,7 @@ import "./privacy.css";
 
 export const metadata: Metadata = {title: "Privacy policy — RepCount", description: "What RepCount collects, why, who can see it and how to have it corrected or deleted."};
 
-const updated = "9 November 2026";
+const updated = "17 November 2026";
 
 /** Public privacy policy, linked from sign-up, the password page and the footer. Contact via PRIVACY_CONTACT_EMAIL. */
 export default function PrivacyPage() {
@@ -23,12 +23,17 @@ export default function PrivacyPage() {
       <li><b>Your starting point:</b> your main goal, where you train and how often you’d like to train.</li>
       <li><b>Profile details your trainer or the team may record:</b> date of birth, gender and height.</li>
       <li><b>Health and activity data you log:</b> weight and body-fat entries, water, steps, sleep, mood, workouts and meals completed, and weekly check-in answers.</li>
+      <li><b>Health data from your phone (only if you connect it in the RepCount app):</b> daily totals of steps, sleep, resting heart rate, active energy, workouts and weight, read from Health Connect (Android) or Apple Health (iPhone). See below.</li>
       <li><b>Messages</b> between you and your trainer, and the payment reference you submit. We never collect card or bank details.</li>
       <li><b>Security records:</b> sign-in attempts and an audit log of staff actions on your account.</li>
     </ul>
 
     <h2>Why we use it</h2>
     <p>To run your programme: so your trainer can plan your workouts and nutrition, follow your progress and answer your questions; to verify payment; to show your streak and rank on the member leaderboard; and to keep accounts secure. We do not sell your data or use it for advertising.</p>
+
+    <h2>Health data from your phone</h2>
+    <p>The RepCount app asks your permission before reading anything from Health Connect or Apple Health, and you choose which types it may read. It reads only the types listed above, only as one total per day for the last few weeks, and never writes to them. This data comes from your phone and any fitness band or app you have connected to it.</p>
+    <p>We use it only to show you and your trainer your activity and to coach you. We never sell it, use it for advertising, share it with data brokers or use it to train AI models. Only your trainer and the RepCount admin team can see it. You can stop sharing at any time in Health Connect or in your iPhone’s Settings → Health, and data already shared is deleted when your account is deleted.</p>
 
     <h2>Who can see it</h2>
     <ul>
@@ -41,10 +46,10 @@ export default function PrivacyPage() {
     <p>For as long as your account is open, and up to 12 months after your programme ends so you can come back to your history. You can ask us to delete it sooner.</p>
 
     <h2>Your choices and rights</h2>
-    <p>You can ask to see, correct or delete your data, or withdraw your consent, by contacting {reach}. Withdrawing consent ends your programme, because we can’t coach you without this information. You can raise a concern with the Data Protection Board of India under the Digital Personal Data Protection Act, 2023.</p>
+    <p>You can delete your account and all your data yourself in the RepCount app (Profile → Delete account). You can also ask to see, correct or delete your data, or withdraw your consent, by contacting {reach}. Withdrawing consent ends your programme, because we can’t coach you without this information. You can raise a concern with the Data Protection Board of India under the Digital Personal Data Protection Act, 2023.</p>
 
     <h2>Security</h2>
-    <p>Passwords are hashed, connections are encrypted, sessions expire after 7 days and can be revoked, and only staff with a role on your account can open it.</p>
+    <p>Passwords are hashed, connections are encrypted, website sessions expire after 7 days and app sign-ins after 30 days (both are revoked when you change your password), and only staff with a role on your account can open it.</p>
 
     <h2>Changes</h2>
     <p>If this policy changes in a way that matters, we’ll tell you in the app before it takes effect.</p>

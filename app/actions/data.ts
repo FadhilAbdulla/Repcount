@@ -14,6 +14,8 @@ import {shiftDay} from "@/lib/streak";
 import {sendPasswordLink} from "@/lib/passwordTokens";
 import {mailStatus, saveMailSettings, sendEmail, sendLater} from "@/lib/mail";
 import {emails} from "@/lib/emails";
+import {PAYMENTS_ENABLED} from "@/lib/features";
+import * as blog from "@/lib/blog";
 
 type Result = {ok?: string; error?: string};
 const validEmail = (email: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) && email.length <= 254;
@@ -97,6 +99,7 @@ export async function verifyPayment(clientId: string): Promise<Result> {
   const user = await requireRole("admin");
   const client = await store.getClient(clientId);
   if (!client) return {error: "Unknown client."};
+  if (!PAYMENTS_ENABLED) return {error: "Payments are coming in phase 2."};
   if (client.paid) return {ok: `${client.name} is already verified.`};
   await store.verifyPayment(clientId);
   sendLater(emails.paymentVerified(memberOf(client), client.trainerId ? client.trainer : null));
@@ -113,6 +116,18 @@ export async function setClientStage(clientId: string, stage: string): Promise<R
   await store.audit(user.id, "set_stage", `${client.name} · ${client.stage} → ${stage}`, clientId);
   revalidatePath("/admin", "layout");
   return {ok: `${client.name} moved to ${stage}.`};
+}
+
+/** Cancels a client's membership (status Cancelled) or restores it. Their sign-in is managed separately. */
+export async function setClientCancelled(clientId: string, cancelled: boolean): Promise<Result> {
+  const user = await requireRole("admin");
+  const client = await store.getClient(clientId);
+  if (!client) return {error: "Unknown client."};
+  if (client.cancelled === (cancelled === true)) return {ok: `${client.name} is already ${cancelled ? "cancelled" : "active"}.`};
+  await store.setCancelled(clientId, cancelled === true);
+  await store.audit(user.id, cancelled ? "cancel_membership" : "restore_membership", client.name, clientId);
+  refreshAll();
+  return {ok: cancelled ? `${client.name}’s membership is cancelled.` : `${client.name}’s membership is restored.`};
 }
 
 export async function reviewCheckin(clientId: string): Promise<Result> {
@@ -136,6 +151,52 @@ export async function saveSettings(input: {price: string}): Promise<Result> {
   await store.audit(user.id, "update_settings", `${store.currency} ${price}`);
   revalidatePath("/", "layout");
   return {ok: "Price saved."};
+}
+
+/** The WhatsApp number behind the website's chat button. Blank turns the button off. */
+export async function saveWhatsApp(input: {number: string}): Promise<Result> {
+  const user = await requireRole("admin");
+  const raw = String(input.number ?? "").trim();
+  const digits = raw.replace(/[\s()+.-]/g, "");
+  if (digits && !/^[1-9]\d{7,14}$/.test(digits)) return {error: "Enter the full number with country code, e.g. +971 50 123 4567."};
+  await store.updateSettings({whatsapp: digits});
+  await store.audit(user.id, "update_whatsapp", digits ? `+${digits}` : "removed");
+  revalidatePath("/", "layout");
+  return {ok: digits ? "WhatsApp number saved. The chat button is live on the website." : "WhatsApp button removed from the website."};
+}
+
+/** Creates (id null) or updates a blog post. */
+export async function savePost(id: number | null, input: {title: string; slug: string; excerpt: string; body: string; coverUrl: string; published: boolean}): Promise<Result> {
+  const user = await requireRole("admin");
+  const title = String(input.title ?? "").trim();
+  const slug = blog.slugify(String(input.slug ?? "").trim() || title);
+  const excerpt = String(input.excerpt ?? "").trim();
+  const body = String(input.body ?? "").trim();
+  const coverUrl = String(input.coverUrl ?? "").trim();
+  if (title.length < 3 || title.length > 120) return {error: "Give the post a title of 3 to 120 characters."};
+  if (!slug) return {error: "The web address needs letters or numbers."};
+  if (excerpt.length > 300) return {error: "Keep the summary under 300 characters (it’s the Google description)."};
+  if (body.length < 20) return {error: "Write the article before saving."};
+  if (body.length > 50_000) return {error: "That article is too long (50,000 characters max)."};
+  if (coverUrl && !/^https:\/\/\S+$/.test(coverUrl)) return {error: "The cover image must be an https:// link."};
+  if (await blog.slugTaken(slug, id)) return {error: `Another post already uses /blog/${slug}. Change the web address.`};
+  const post = await blog.savePost(id, {title, slug, excerpt, body, coverUrl, published: input.published === true});
+  if (!post) return {error: "That post no longer exists."};
+  await store.audit(user.id, id === null ? "add_post" : "edit_post", `${title}${post.published ? "" : " (draft)"}`);
+  revalidatePath("/blog", "layout");
+  revalidatePath("/admin", "layout");
+  revalidatePath("/sitemap.xml");
+  return {ok: post.published ? `“${title}” is published.` : `“${title}” saved as a draft.`};
+}
+
+export async function deletePost(id: number): Promise<Result> {
+  const user = await requireRole("admin");
+  if (!(await blog.deletePost(Number(id)))) return {error: "That post no longer exists."};
+  await store.audit(user.id, "delete_post", `Post #${id}`);
+  revalidatePath("/blog", "layout");
+  revalidatePath("/admin", "layout");
+  revalidatePath("/sitemap.xml");
+  return {ok: "Post deleted."};
 }
 
 export async function addTrainer(input: {name: string; email: string; title: string; password: string}): Promise<Result> {
@@ -347,14 +408,14 @@ export async function editMembership(clientId: string, input: {paid: boolean; re
   const reference = String(input.reference ?? "").trim();
   const nextCheckIn = String(input.nextCheckIn ?? "").trim() || "Not booked";
   const joinedOn = String(input.joinedOn ?? "").trim();
-  if (reference.length > 60) return {error: "Keep the payment reference under 60 characters."};
+  if (PAYMENTS_ENABLED && reference.length > 60) return {error: "Keep the payment reference under 60 characters."};
   if (nextCheckIn.length > 60) return {error: "Keep the next check-in under 60 characters."};
   if (joinedOn && (!isoDay.test(joinedOn) || joinedOn < "2020-01-01" || joinedOn > shiftDay(istToday().day, 366))) return {error: "Enter a valid join date."};
   const ok = await store.updateMembership(clientId, {paid: input.paid === true, reference: reference || null, joinedOn: joinedOn || null, nextCheckIn});
   if (!ok) return {error: "That client no longer exists."};
   const client = await store.getClient(clientId);
   if (client && before && !before.paid && client.paid) sendLater(emails.paymentVerified(memberOf(client), client.trainerId ? client.trainer : null));
-  await store.audit(user.id, "edit_membership", `${client?.name} · ${input.paid ? "paid" : "unpaid"}${reference ? ` · ${reference}` : ""}`, clientId);
+  await store.audit(user.id, "edit_membership", PAYMENTS_ENABLED ? `${client?.name} · ${input.paid ? "paid" : "unpaid"}${reference ? ` · ${reference}` : ""}` : `${client?.name} · dates`, clientId);
   refreshAll();
   return {ok: `${client?.name}’s membership saved.`};
 }

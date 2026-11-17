@@ -8,13 +8,17 @@ import Brand from "./Brand";
 import {Icon} from "./Media";
 import {BarChart, StaffInsights, palette} from "./Tracker";
 import {logout} from "./actions/auth";
-import {addClient, addTrainer, assignTrainer, reviewCheckin, saveSettings, verifyPayment} from "./actions/data";
+import {addClient, addTrainer, assignTrainer, reviewCheckin, saveSettings, saveWhatsApp, verifyPayment} from "./actions/data";
 import type {AuditEntry, ClientRow, Settings, TrainerStats} from "@/lib/store";
 import Modal from "./Modal";
 import PasswordInput from "./PasswordInput";
 import {AdminAccounts, ChangePassword, EmailSettings, MembershipEditor} from "./AdminEditors";
 import type {EmailLogRow, MailStatus} from "@/lib/mail";
 import type {AdminAccount} from "@/lib/users";
+import type {Post} from "@/lib/blog";
+import BlogAdmin from "./BlogAdmin";
+import {PAYMENTS_ENABLED} from "@/lib/features";
+import {clientStatus, clientStatuses} from "@/lib/programme";
 import "./member-polish.css";
 import "./accessibility-polish.css";
 import "./staff.css";
@@ -26,7 +30,7 @@ export type StaffUser = {name: string; initials: string; email: string};
 
 const tabs: Record<StaffRole, [string, string, string, string][]> = {
   trainer: [["today", "home", "Today", "Today"], ["clients", "move", "My members", "Members"], ["checkins", "chat", "Check-ins", "Check-ins"]],
-  admin: [["overview", "chart", "Overview", "Overview"], ["clients", "users", "Clients", "Clients"], ["payments", "card", "Payments", "Payments"], ["trainers", "heart", "Trainers", "Trainers"], ["admins", "shield", "Admins", "Admins"], ["settings", "sliders", "Settings", "Settings"]],
+  admin: [["overview", "chart", "Overview", "Overview"], ["clients", "users", "Clients", "Clients"], ["payments", "card", "Payments", "Payments"], ["trainers", "heart", "Trainers", "Trainers"], ["admins", "shield", "Admins", "Admins"], ["blog", "edit", "Blog", "Blog"], ["settings", "sliders", "Settings", "Settings"]],
 };
 const headings: Record<string, [string, string]> = {
   today: ["Today’s floor.", "Who’s training, who needs a nudge, and what’s next."],
@@ -34,13 +38,14 @@ const headings: Record<string, [string, string]> = {
   members: ["Your members.", "Open a member to plan their week, add their Meet links and nutrition, and mark sessions completed."],
   checkins: ["Weekly check-ins.", "Review how each client’s week went and adjust their plan."],
   overview: ["Overview.", "Your clients, payments and trainers at a glance."],
-  payments: ["Payments.", "Every client’s payment: verify references as they come in."],
+  payments: PAYMENTS_ENABLED ? ["Payments.", "Every client’s payment: verify references as they come in."] : ["Payments.", "Online payments are coming in phase 2."],
   trainers: ["Trainers.", "Your coaching team. Open a trainer to see their details and clients."],
   admins: ["Admins.", "Everyone who can manage RepCount."],
-  settings: ["Settings.", "Pricing, email and your password."],
+  blog: ["Blog.", "Health articles and resources for the public website. They help people find RepCount on Google."],
+  settings: ["Settings.", "Pricing, WhatsApp, email and your password."],
 };
 
-export const activityLabels: Record<string, string> = {assign_trainer: "Trainer assigned", verify_payment: "Payment verified", review_checkin: "Check-in reviewed", update_settings: "Settings updated", add_trainer: "Trainer added", edit_trainer: "Trainer edited", edit_client: "Client details edited", schedule_week: "Week scheduled", confirm_session: "Session completed", unconfirm_session: "Session completion removed", save_nutrition: "Nutrition plan saved", set_meeting_link: "Call link updated", add_client: "Client added", set_stage: "Stage changed", deactivate_user: "Account deactivated", reactivate_user: "Account reactivated", self_register: "Registered online", ask_coach: "Question sent", reply_member: "Reply sent", send_reset_link: "Reset link sent", edit_membership: "Membership edited", edit_member_log: "Member log corrected", delete_client: "Client deleted", delete_trainer: "Trainer deleted", delete_admin: "Admin deleted", delete_message: "Message removed", add_admin: "Admin added", edit_admin: "Admin edited", change_password: "Password changed", edit_email_settings: "Email settings changed", complete_onboarding: "Onboarding answered"};
+export const activityLabels: Record<string, string> = {update_whatsapp: "WhatsApp number changed", add_post: "Blog post added", edit_post: "Blog post edited", delete_post: "Blog post deleted", cancel_membership: "Membership cancelled", restore_membership: "Membership restored", assign_trainer: "Trainer assigned", verify_payment: "Payment verified", review_checkin: "Check-in reviewed", update_settings: "Settings updated", add_trainer: "Trainer added", edit_trainer: "Trainer edited", edit_client: "Client details edited", schedule_week: "Week scheduled", confirm_session: "Session completed", unconfirm_session: "Session completion removed", save_nutrition: "Nutrition plan saved", set_meeting_link: "Call link updated", add_client: "Client added", set_stage: "Stage changed", deactivate_user: "Account deactivated", reactivate_user: "Account reactivated", self_register: "Registered online", ask_coach: "Question sent", reply_member: "Reply sent", send_reset_link: "Reset link sent", edit_membership: "Membership edited", edit_member_log: "Member log corrected", delete_client: "Client deleted", delete_trainer: "Trainer deleted", delete_admin: "Admin deleted", delete_message: "Message removed", add_admin: "Admin added", edit_admin: "Admin edited", change_password: "Password changed", edit_email_settings: "Email settings changed", complete_onboarding: "Onboarding answered"};
 const stageOrder = ["Payment review", "Onboarding", "Check-in due", "Active"];
 const sorters: Record<string, (a: ClientRow, b: ClientRow) => number> = {
   Name: (a, b) => a.name.localeCompare(b.name),
@@ -55,18 +60,21 @@ const formatDate = (iso: string | null) => iso ? new Date(`${iso.slice(0, 10)}T0
 /** Where a client's payment stands: verified by an admin, a reference waiting for review, or nothing submitted yet. */
 export const paymentStatus = (c: ClientRow) => c.paid ? "Verified" : c.reference ? "Awaiting verification" : "Not submitted";
 const paymentKey = (status: string) => status.toLowerCase().replace(/[^a-z]+/g, "-");
+/** The client's status pill: Unassigned, Assigned or Cancelled. */
+export const StatusPill = ({client}: {client: {cancelled: boolean; trainerId: string | null}}) => {const status = clientStatus(client); return <span className="rc-pay-status" data-status={paymentKey(status)}>{status}</span>;};
 
 type Props = {
   area: StaffRole; user: StaffUser; clients: ClientRow[]; settings: Settings; activity: AuditEntry[];
-  trainers?: TrainerStats[]; initialTab?: string; detail?: ReactNode; detailTab?: string; admins?: AdminAccount[]; mail?: {status: MailStatus; recent: EmailLogRow[]};
+  trainers?: TrainerStats[]; initialTab?: string; detail?: ReactNode; detailTab?: string; admins?: AdminAccount[]; mail?: {status: MailStatus; recent: EmailLogRow[]}; posts?: Post[];
 };
 
-export default function StaffApp({area: role, user, clients, settings, activity, trainers = [], initialTab, detail, detailTab, admins = [], mail}: Props) {
+export default function StaffApp({area: role, user, clients, settings, activity, trainers = [], initialTab, detail, detailTab, admins = [], mail, posts = []}: Props) {
   const router = useRouter();
   const admin = role === "admin";
   const [tab, setTab] = useState(initialTab && tabs[role].some(([key]) => key === initialTab) ? initialTab : tabs[role][0][0]);
   const [filter, setFilter] = useState("All stages");
   const [trainerFilter, setTrainerFilter] = useState("All trainers");
+  const [statusFilter, setStatusFilter] = useState("All statuses");
   const [sort, setSort] = useState("Name");
   const [paymentView, setPaymentView] = useState(() => clients.some(c => !c.paid && c.reference) ? "Awaiting verification" : "All");
   const [newTrainer, setNewTrainer] = useState(emptyTrainer);
@@ -78,6 +86,7 @@ export default function StaffApp({area: role, user, clients, settings, activity,
   const [noticeError, setNoticeError] = useState(false);
   const [pending, startTransition] = useTransition();
   const [price, setPrice] = useState(settings.price);
+  const [whatsapp, setWhatsapp] = useState(settings.whatsapp ? `+${settings.whatsapp}` : "");
   // Server actions re-check the role; the refreshed clients arrive as new props.
   const run = (action: () => Promise<{ok?: string; error?: string}>) => startTransition(async () => {
     const result = await action();
@@ -88,10 +97,10 @@ export default function StaffApp({area: role, user, clients, settings, activity,
   const search = query.trim().toLowerCase();
   const matches = (c: ClientRow) => !search || [c.name, c.email ?? "", c.phone ?? ""].some(v => v.toLowerCase().includes(search));
   const visible = clients
-    .filter(c => matches(c) && (filter === "All stages" || c.stage === filter) && (trainerFilter === "All trainers" || (trainerFilter === "Unassigned" ? !c.trainerId : c.trainerId === trainerFilter)))
+    .filter(c => matches(c) && (filter === "All stages" || c.stage === filter) && (statusFilter === "All statuses" || clientStatus(c) === statusFilter) && (trainerFilter === "All trainers" || (trainerFilter === "Unassigned" ? !c.trainerId : c.trainerId === trainerFilter)))
     .sort(sorters[sort]);
-  const filtered = query !== "" || filter !== "All stages" || trainerFilter !== "All trainers";
-  const clearFilters = () => {setQuery(""); setFilter("All stages"); setTrainerFilter("All trainers");};
+  const filtered = query !== "" || filter !== "All stages" || trainerFilter !== "All trainers" || statusFilter !== "All statuses";
+  const clearFilters = () => {setQuery(""); setFilter("All stages"); setTrainerFilter("All trainers"); setStatusFilter("All statuses");};
   const openTab = (key: string) => {
     setNotice("");
     if (detail) { router.push(`/${role}?tab=${key}`); return; }
@@ -111,14 +120,15 @@ export default function StaffApp({area: role, user, clients, settings, activity,
     <div className="section-top"><h2>{admin ? "All clients" : "Your assigned members"}</h2><span className="pill">{visible.length} SHOWN</span></div>
     <div className="filters rc-roster-filters">
       <input type="search" aria-label="Search clients by name" placeholder="Search by name…" value={query} onChange={e => setQuery(e.target.value)}/>
-      <select aria-label="Filter clients by stage" value={filter} onChange={e => setFilter(e.target.value)}><option>All stages</option><option>Active</option><option>Onboarding</option><option>Check-in due</option>{admin && <option>Payment review</option>}</select>
+      <select aria-label="Filter clients by stage" value={filter} onChange={e => setFilter(e.target.value)}><option>All stages</option><option>Active</option><option>Onboarding</option><option>Check-in due</option>{admin && (PAYMENTS_ENABLED || clients.some(c => c.stage === "Payment review")) && <option>Payment review</option>}</select>
+      {admin && <select aria-label="Filter clients by status" value={statusFilter} onChange={e => setStatusFilter(e.target.value)}><option>All statuses</option>{clientStatuses.map(s => <option key={s}>{s}</option>)}</select>}
       {admin && <>
         <select aria-label="Filter clients by trainer" value={trainerFilter} onChange={e => setTrainerFilter(e.target.value)}><option>All trainers</option>{trainers.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}<option>Unassigned</option></select>
         <select aria-label="Sort clients" value={sort} onChange={e => setSort(e.target.value)}>{Object.keys(sorters).map(k => <option key={k} value={k}>Sort: {k}</option>)}</select>
       </>}
       {filtered && <button type="button" className="small-button" onClick={clearFilters}>Clear filters</button>}
     </div>
-    <div className="table-scroll"><table className="rc-cards"><thead><tr><th>Client</th><th>Stage</th>{admin ? <th>Trainer</th> : <th>Goal</th>}<th>This week</th><th>{admin ? "Joined" : "Last workout"}</th></tr></thead><tbody>
+    <div className="table-scroll"><table className="rc-cards"><thead><tr><th>Client</th><th>Stage</th>{admin ? <th>Trainer</th> : <th>Goal</th>}<th>This week</th><th>{admin ? "Joined" : "Last workout"}</th>{admin && <th>Status</th>}</tr></thead><tbody>
       {visible.map(c => <tr key={c.id}>
         <td data-label="Client"><Link className="client-name rc-client-link" href={clientHref(c)}><span className="avatar">{c.initials}</span><span><b>{c.name}</b>{c.email && <small>{c.email}</small>}</span></Link></td>
         <td data-label="Stage"><span className="rc-stage-pill" data-stage={paymentKey(c.stage)}>{c.stage}</span>{!c.intake && <span className="pill rc-pill-warn" title="Profile completes when the member answers the onboarding questions">Profile incomplete</span>}</td>
@@ -129,8 +139,9 @@ export default function StaffApp({area: role, user, clients, settings, activity,
           ? <><progress max={c.weekPlanned} value={c.weekDone} aria-label={`${c.name}: ${c.weekDone} of ${c.weekPlanned} workouts done this week`}/><small>{c.weekDone} of {c.weekPlanned} workouts · {c.progress}%</small></>
           : <small className="rc-muted">No plan this week</small>}</td>
         <td data-label={admin ? "Joined" : "Last workout"}>{admin ? formatDate(c.joinedOn) : c.lastWorkout}</td>
+        {admin && <td data-label="Status"><StatusPill client={c}/></td>}
       </tr>)}
-      {visible.length === 0 && <tr className="member-empty-row"><td colSpan={5} data-label="">{clients.length === 0 ? "No clients yet." : "No clients match this view. Try another filter or search."}</td></tr>}
+      {visible.length === 0 && <tr className="member-empty-row"><td colSpan={admin ? 6 : 5} data-label="">{clients.length === 0 ? "No clients yet." : "No clients match this view. Try another filter or search."}</td></tr>}
     </tbody></table></div>
   </section>;
 
@@ -157,7 +168,13 @@ export default function StaffApp({area: role, user, clients, settings, activity,
   const paymentCount = (v: string) => v === "All" ? clients.length : clients.filter(c => paymentStatus(c) === v).length;
   const paymentRows = clients.filter(c => paymentView === "All" || paymentStatus(c) === paymentView).sort(sorters.Newest);
   const verifiedCount = paymentCount("Verified");
-  const payments = <>
+  const payments = !PAYMENTS_ENABLED ? <section className="card rc-locked">
+    <span className="rc-locked-icon" aria-hidden="true"><Icon name="lock" size={26}/></span>
+    <span className="pill">PHASE 2</span>
+    <h2>Payments are locked for now.</h2>
+    <p>Online payments and payment verification arrive in phase 2. Until then, clients start straight in onboarding, and each client’s status is Unassigned, Assigned or Cancelled.</p>
+    <button type="button" className="button dark" onClick={() => openTab("clients")}>See client statuses →</button>
+  </section> : <>
     <div className="three-grid metrics">
       <section className="card"><span className="eyebrow">Verified revenue</span><strong>{money(verifiedCount * Number(settings.price))}</strong><small>{verifiedCount} verified payment{verifiedCount === 1 ? "" : "s"}</small></section>
       <section className="card"><span className="eyebrow">Awaiting verification</span><strong>{paymentCount("Awaiting verification")}</strong><small>References to check</small></section>
@@ -220,8 +237,9 @@ export default function StaffApp({area: role, user, clients, settings, activity,
   const unassigned = clients.filter(c => !c.trainerId);
   const awaiting = clients.filter(c => paymentStatus(c) === "Awaiting verification");
   const incomplete = clients.filter(c => !c.intake);
+  const cancelledCount = clients.filter(c => c.cancelled).length;
   const attention: [number, string, string, string, () => void][] = [
-    [awaiting.length, "payment reference to verify", "payment references to verify", "Review payments", () => {setPaymentView("Awaiting verification"); openTab("payments");}],
+    [PAYMENTS_ENABLED ? awaiting.length : 0, "payment reference to verify", "payment references to verify", "Review payments", () => {setPaymentView("Awaiting verification"); openTab("payments");}],
     [unassigned.length, "client without a trainer", "clients without a trainer", "Assign trainers", () => {setTrainerFilter("Unassigned"); openTab("clients");}],
     [dueCheckIns.length, "check-in waiting for review", "check-ins waiting for review", "See clients", () => {setFilter("Check-in due"); openTab("clients");}],
     [incomplete.length, "client hasn’t finished onboarding", "clients haven’t finished onboarding", "See clients", () => openTab("clients")],
@@ -231,7 +249,8 @@ export default function StaffApp({area: role, user, clients, settings, activity,
   const trainedThisWeek = clients.filter(c => c.weekDone > 0).length;
   const adminMetrics: [string, string, string][] = [
     [String(clients.length), "Clients", `${clients.filter(c => c.stage === "Active").length} active · ${clients.filter(c => c.stage === "Onboarding").length} onboarding`],
-    [money(verifiedCount * Number(settings.price)), "Verified revenue", `${verifiedCount} of ${clients.length} paid`],
+    PAYMENTS_ENABLED ? [money(verifiedCount * Number(settings.price)), "Verified revenue", `${verifiedCount} of ${clients.length} paid`]
+      : [String(clients.length - cancelledCount), "Active memberships", `${cancelledCount} cancelled`],
     [String(activeTrainers), "Trainers", `${clients.length - unassigned.length} of ${clients.length} clients assigned`],
     [String(trainedThisWeek), "Trained this week", `${clients.filter(c => c.weekPlanned > 0).length} of ${clients.length} have a plan`],
   ];
@@ -244,7 +263,7 @@ export default function StaffApp({area: role, user, clients, settings, activity,
       </section>
       <section className="card"><div className="section-top"><h2>Newest clients</h2><button type="button" className="small-button" onClick={() => {setSort("Newest"); openTab("clients");}}>All clients →</button></div>
         {newest.length === 0 ? <p className="rc-staff-empty">No clients yet.</p>
-          : <ul className="rc-mini-list">{newest.map(c => <li key={c.id}><Link className="client-name rc-client-link" href={clientHref(c)}><span className="avatar">{c.initials}</span><span><b>{c.name}</b><small>{c.trainer === "Unassigned" ? "No trainer yet" : c.trainer} · joined {formatDate(c.joinedOn)}</small></span></Link><span className="rc-pay-status" data-status={paymentKey(paymentStatus(c))}>{paymentStatus(c)}</span></li>)}</ul>}
+          : <ul className="rc-mini-list">{newest.map(c => <li key={c.id}><Link className="client-name rc-client-link" href={clientHref(c)}><span className="avatar">{c.initials}</span><span><b>{c.name}</b><small>{c.trainer === "Unassigned" ? "No trainer yet" : c.trainer} · joined {formatDate(c.joinedOn)}</small></span></Link>{PAYMENTS_ENABLED ? <span className="rc-pay-status" data-status={paymentKey(paymentStatus(c))}>{paymentStatus(c)}</span> : <StatusPill client={c}/>}</li>)}</ul>}
       </section>
     </div>
     <StaffInsights clients={clients}/>
@@ -272,8 +291,18 @@ export default function StaffApp({area: role, user, clients, settings, activity,
       <div className="card">
         <form className="rc-settings-form" onSubmit={e => {e.preventDefault(); run(() => saveSettings({price}));}}>
           <label className="field">Price per 30 days<span className="rc-input-affix"><input inputMode="numeric" value={price} onChange={e => setPrice(e.target.value)} required/><span>{settings.currency}</span></span></label>
-          <dl className="rc-settings-facts"><div><dt>Currency</dt><dd>AED (UAE dirham)</dd></div><div><dt>Payment method</dt><dd>Bank transfer, verified by an admin</dd></div></dl>
+          <dl className="rc-settings-facts"><div><dt>Currency</dt><dd>AED (UAE dirham)</dd></div><div><dt>Payments</dt><dd>{PAYMENTS_ENABLED ? "Bank transfer, verified by an admin" : "Coming in phase 2"}</dd></div></dl>
           <div className="rc-settings-actions"><button className="button dark" type="submit" disabled={pending || price === settings.price}>{pending ? "Saving…" : "Save price"}</button></div>
+        </form>
+      </div>
+    </section>
+    <section className="rc-settings-row">
+      <div className="rc-settings-intro"><h2>WhatsApp</h2><p>Adds a WhatsApp chat button to the public website. Visitors tap it to message this number.</p></div>
+      <div className="card">
+        <form className="rc-settings-form" onSubmit={e => {e.preventDefault(); run(() => saveWhatsApp({number: whatsapp}));}}>
+          <label className="field">WhatsApp number (with country code)<input type="tel" inputMode="tel" value={whatsapp} onChange={e => setWhatsapp(e.target.value)} placeholder="+971 50 123 4567" autoComplete="off"/></label>
+          <p className="small-note">{settings.whatsapp ? <>The button is live and opens <a href={`https://wa.me/${settings.whatsapp}`} target="_blank" rel="noreferrer">wa.me/{settings.whatsapp}</a>. Clear the number to remove it.</> : "No number yet, so the website shows no WhatsApp button."}</p>
+          <div className="rc-settings-actions"><button className="button dark" type="submit" disabled={pending || whatsapp.replace(/[\s()+.-]/g, "") === settings.whatsapp}>{pending ? "Saving…" : "Save number"}</button></div>
         </form>
       </div>
     </section>
@@ -295,7 +324,7 @@ export default function StaffApp({area: role, user, clients, settings, activity,
     <aside className="sidebar">
       <span className="brand"><Brand/></span>
       <div className="workspace-label">{admin ? "ADMIN" : "TRAINER WORKSPACE"}</div>
-      <nav aria-label={admin ? "Admin navigation" : "Trainer navigation"}>{tabs[role].map(([key, icon, label, short]) => <button key={key} title={label} className={current === key ? "nav active" : "nav"} aria-current={current === key ? "page" : undefined} onClick={() => openTab(key)}><span aria-hidden="true"><Icon name={icon} size={20}/></span><span className="nav-label">{label}</span><span className="nav-short" aria-hidden="true">{short}</span>{key === "checkins" && dueCheckIns.length > 0 && <small>{dueCheckIns.length}</small>}{key === "payments" && awaiting.length > 0 && <small>{awaiting.length}</small>}</button>)}</nav>
+      <nav aria-label={admin ? "Admin navigation" : "Trainer navigation"}>{tabs[role].map(([key, icon, label, short]) => <button key={key} title={label} className={current === key ? "nav active" : "nav"} aria-current={current === key ? "page" : undefined} onClick={() => openTab(key)}><span aria-hidden="true"><Icon name={icon} size={20}/></span><span className="nav-label">{label}</span><span className="nav-short" aria-hidden="true">{short}</span>{key === "checkins" && dueCheckIns.length > 0 && <small>{dueCheckIns.length}</small>}{key === "payments" && (PAYMENTS_ENABLED ? awaiting.length > 0 && <small>{awaiting.length}</small> : <small className="rc-nav-lock" title="Coming in phase 2"><Icon name="lock" size={12}/></small>)}</button>)}</nav>
       <div className="sidebar-bottom"><form action={logout}><button type="submit" className="rc-sidebar-logout"><Icon name="logout" size={18}/> Log out</button></form></div>
     </aside>
     <div className="content">
@@ -317,9 +346,9 @@ export default function StaffApp({area: role, user, clients, settings, activity,
         {tab === "checkins" && checkIns}
         {tab === "trainers" && admin && <>{trainerList}{addTrainerModal}</>}
         {tab === "admins" && admin && <AdminAccounts admins={admins} selfEmail={user.email} pending={pending} run={run}/>}
+        {tab === "blog" && admin && <BlogAdmin posts={posts} pending={pending} run={run}/>}
         {tab === "settings" && admin && settingsPage}
         </>}
-        <footer><span><Brand variant="phone"/></span><span>{admin ? "Admin" : "Trainer"} · signed in as {user.email}</span></footer>
       </main>
     </div>
   </div>;

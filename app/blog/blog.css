@@ -1,0 +1,52 @@
+/* Public blog: list and article pages, in the landing page's look. */
+.rc-blog-site #rc-main.rc-blog-main{max-width:1180px;margin:0 auto;padding:56px 46px 80px}
+.rc-blog-site .rc-blog-join{font-size:13px;min-height:46px;padding:14px 20px;text-decoration:none}
+.rc-blog-site .rc-blog-hero{max-width:720px;margin:0 0 44px}
+.rc-blog-site .rc-blog-hero h1{font:500 clamp(36px,5vw,58px)/1.08 'Manrope',Arial,sans-serif;letter-spacing:-2px;margin:12px 0 16px;color:var(--rc-ink)}
+.rc-blog-site .rc-blog-hero h1 em{font-family:Georgia,serif;font-weight:400;color:var(--rc-red)}
+.rc-blog-site .rc-blog-hero p{font-size:18px;line-height:1.6;color:var(--rc-muted);margin:0}
+.rc-blog-site .rc-blog-list{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:22px}
+.rc-blog-site .rc-blog-card{display:flex;flex-direction:column;gap:10px;height:100%;padding:26px;border:1px solid var(--rc-line);border-radius:18px;background:#fffdf8;color:inherit;text-decoration:none;transition:transform .2s ease,box-shadow .2s ease,border-color .2s ease}
+.rc-blog-site .rc-blog-card:hover{transform:translateY(-3px);box-shadow:0 14px 30px #2528221a;border-color:#d6d2c6}
+.rc-blog-site .rc-blog-card img{width:calc(100% + 52px);margin:-26px -26px 6px;aspect-ratio:16/9;object-fit:cover;border-radius:18px 18px 0 0}
+.rc-blog-site .rc-blog-card h2{font:600 21px/1.3 'Manrope',Arial,sans-serif;letter-spacing:-.5px;margin:0;color:var(--rc-ink)}
+.rc-blog-site .rc-blog-card p{margin:0;font-size:15px;line-height:1.6;color:var(--rc-muted)}
+.rc-blog-site .rc-blog-meta{font-size:12.5px;letter-spacing:.3px;color:#8a877f}
+.rc-blog-site .rc-blog-more{margin-top:auto;padding-top:8px;font-size:14px;font-weight:600;color:var(--rc-red)}
+.rc-blog-site .rc-blog-empty{font-size:16px;color:var(--rc-muted)}
+
+.rc-blog-site .rc-article{max-width:720px;margin:0 auto}
+.rc-blog-site .rc-article-back{display:inline-block;margin-bottom:28px;font-size:14px;font-weight:500;color:#5e6258;text-decoration:none}
+.rc-blog-site .rc-article-back:hover{color:var(--rc-red)}
+.rc-blog-site .rc-article h1{font:600 clamp(32px,4.4vw,48px)/1.12 'Manrope',Arial,sans-serif;letter-spacing:-1.6px;margin:10px 0 16px;color:var(--rc-ink)}
+.rc-blog-site .rc-article-lede{font-size:19px;line-height:1.6;color:var(--rc-muted);margin:0 0 30px}
+.rc-blog-site .rc-article-cover{width:100%;aspect-ratio:16/9;object-fit:cover;border-radius:18px;margin:0 0 34px}
+.rc-blog-site .rc-article-body{font-size:17.5px;line-height:1.75;color:#33362f}
+.rc-blog-site .rc-article-body p{margin:0 0 20px;color:inherit}
+.rc-blog-site .rc-article-body h2{font:600 26px/1.3 'Manrope',Arial,sans-serif;letter-spacing:-.6px;margin:40px 0 14px;color:var(--rc-ink)}
+.rc-blog-site .rc-article-body h3{font:600 20px/1.35 'Manrope',Arial,sans-serif;margin:30px 0 10px;color:var(--rc-ink)}
+.rc-blog-site .rc-article-body ul,.rc-blog-site .rc-article-body ol{margin:0 0 22px;padding-left:24px}
+.rc-blog-site .rc-article-body li{margin:0 0 9px;padding-left:4px}
+.rc-blog-site .rc-article-body li::marker{color:var(--rc-red)}
+.rc-blog-site .rc-article-body strong{color:var(--rc-ink)}
+.rc-blog-site .rc-article-body em{color:#6b6a66}
+.rc-blog-site .rc-article-body a{color:var(--rc-red);text-underline-offset:3px}
+.rc-blog-site .rc-article-body blockquote{margin:0 0 22px;padding:14px 18px;border-left:3px solid var(--rc-red);background:#f6f2ea;border-radius:8px}
+.rc-blog-site .rc-article-body blockquote p{margin:0}
+.rc-blog-site .rc-article-cta{margin:50px 0 0;padding:30px;border-radius:18px;background:var(--rc-sage)}
+.rc-blog-site .rc-article-cta h2{font:600 24px/1.3 'Manrope',Arial,sans-serif;margin:0 0 8px}
+.rc-blog-site .rc-article-cta p{margin:0 0 18px;color:var(--rc-muted);line-height:1.6}
+.rc-blog-site .rc-article-cta .rc-button{display:inline-flex;text-decoration:none}
+
+.rc-blog-site .rc-blog-footer{border-top:1px solid var(--rc-line);padding:28px 46px 40px;max-width:1180px;margin:0 auto;font-size:14px;color:var(--rc-muted)}
+.rc-blog-site .rc-blog-footer p{margin:0 0 8px}
+.rc-blog-site .rc-blog-footer a{color:inherit}
+.rc-blog-site .rc-blog-disclaimer{font-size:12.5px}
+
+@media(max-width:700px){
+  .rc-blog-site #rc-main.rc-blog-main{padding:36px 20px 90px}
+  .rc-blog-site .rc-blog-footer{padding:24px 20px 100px}
+  .rc-blog-site .rc-blog-list{grid-template-columns:1fr}
+  .rc-blog-site .rc-blog-join{padding:12px 14px;font-size:12px}
+  .rc-blog-site .rc-article-body{font-size:16.5px}
+}

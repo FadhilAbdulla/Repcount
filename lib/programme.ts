@@ -4,6 +4,11 @@
 export const currency = "AED";
 export const stages = ["Payment review", "Onboarding", "Active", "Check-in due"] as const;
 
+/** A client's membership status: cancelled by an admin, otherwise assigned once they have a trainer. */
+export const clientStatuses = ["Unassigned", "Assigned", "Cancelled"] as const;
+export type ClientStatus = (typeof clientStatuses)[number];
+export const clientStatus = (c: {cancelled: boolean; trainerId: string | null}): ClientStatus => c.cancelled ? "Cancelled" : c.trainerId ? "Assigned" : "Unassigned";
+
 /* Registration choices: what the member wants, where they'll train and how often. */
 export const goals = ["Build strength", "Build a consistent routine", "Feel more confident exercising", "Lose body fat", "Improve mobility"] as const;
 export const places = ["At home", "At a gym", "A mix of both"] as const;

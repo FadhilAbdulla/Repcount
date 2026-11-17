@@ -1,5 +1,6 @@
 "use client";
 
+import {PAYMENTS_ENABLED} from "@/lib/features";
 import {useId, useState} from "react";
 import type {CSSProperties, ReactNode} from "react";
 import {Icon} from "./Media";
@@ -321,12 +322,13 @@ export function JourneyTimeline({start, today, weekly, target}: {start: {iso: st
 
 /* ------------------------------ staff view ---------------------------- */
 
-export type StaffClient = {name: string; stage: string; paid: boolean; progress: number; trainer: string; weekPlanned: number; weekDone: number};
+export type StaffClient = {name: string; stage: string; paid: boolean; cancelled?: boolean; progress: number; trainer: string; weekPlanned: number; weekDone: number};
 export function StaffInsights({clients}: {clients: StaffClient[]}) {
   const stages = ["Active", "Onboarding", "Check-in due", "Payment review"];
   const colors = [palette.sage, palette.lilac, palette.clay, palette.red];
   const stageSlices = stages.map((s, i) => ({label: s, value: clients.filter(c => c.stage === s).length, color: colors[i]})).filter(s => s.value > 0);
   const paid = clients.filter(c => c.paid).length;
+  const cancelled = clients.filter(c => c.cancelled).length;
   // Only members with a plan this week count towards completion; unscheduled members aren't failing, they're waiting for a plan.
   const scheduled = clients.filter(c => c.weekPlanned > 0);
   const planned = scheduled.reduce((s, c) => s + c.weekPlanned, 0);
@@ -339,9 +341,10 @@ export function StaffInsights({clients}: {clients: StaffClient[]}) {
     <div className="tk-grid-3 tk-inner">
       <div><h3>Where clients are</h3><Donut label="Clients by stage" centerBig={String(clients.length)} centerSmall="clients" slices={stageSlices}/></div>
       <div><h3>Workouts done this week</h3>{scheduled.length ? <BarChart label="Workouts done out of planned this week, per client" unit="workouts" color={palette.sage} bars={scheduled.map(c => ({label: c.name.split(" ")[0], value: c.weekDone, planned: c.weekPlanned}))} format={n => String(n)} rowLabel="Client"/> : <p className="tk-caption">No workouts are planned for this week yet.</p>}<p className="tk-caption"><b>{doneTotal} of {planned}</b> planned workouts done ({avg}%) · {scheduled.length} of {clients.length} clients have a plan this week</p></div>
-      <div><h3>Payments &amp; coverage</h3><Donut label="Payments verified" centerBig={`${paid}/${clients.length}`} centerSmall="verified" slices={[{label: "Verified", value: paid, color: palette.sage}, {label: "Awaiting review", value: clients.length - paid, color: palette.red}]}/>
-        <Donut label="Trainer assignment" centerBig={`${trainers[0].value}/${clients.length}`} centerSmall="assigned" slices={[{label: "Assigned", value: trainers[0].value, color: palette.lilac}, {label: "Unassigned", value: trainers[1].value, color: palette.mist}]}/></div>
+      <div><h3>{PAYMENTS_ENABLED ? <>Payments &amp; coverage</> : "Client status"}</h3>{PAYMENTS_ENABLED ? <Donut label="Payments verified" centerBig={`${paid}/${clients.length}`} centerSmall="verified" slices={[{label: "Verified", value: paid, color: palette.sage}, {label: "Awaiting review", value: clients.length - paid, color: palette.red}]}/>
+        : <Donut label="Clients by status" centerBig={String(clients.length - cancelled)} centerSmall="active" slices={[{label: "Assigned", value: clients.filter(c => !c.cancelled && c.trainer !== "Unassigned").length, color: palette.sage}, {label: "Unassigned", value: clients.filter(c => !c.cancelled && c.trainer === "Unassigned").length, color: palette.clay}, {label: "Cancelled", value: cancelled, color: palette.mist}].filter(s => s.value > 0)}/>}
+        {PAYMENTS_ENABLED && <Donut label="Trainer assignment" centerBig={`${trainers[0].value}/${clients.length}`} centerSmall="assigned" slices={[{label: "Assigned", value: trainers[0].value, color: palette.lilac}, {label: "Unassigned", value: trainers[1].value, color: palette.mist}]}/>}</div>
     </div>
-    <p className="tk-note">Updates as clients log progress and staff verify payments.</p>
+    <p className="tk-note">Updates as clients log progress{PAYMENTS_ENABLED ? " and staff verify payments" : ""}.</p>
   </section>;
 }

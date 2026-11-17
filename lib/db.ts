@@ -2,6 +2,7 @@ import "server-only";
 import {randomBytes} from "node:crypto";
 import postgres from "postgres";
 import {hashPassword} from "./passwords";
+import {starterPosts} from "./blogStarter";
 
 /*
  * Postgres store (Neon in production, any Postgres locally). Set DATABASE_URL to the connection string.
@@ -129,6 +130,8 @@ const schema = `
   create index if not exists password_tokens_user_idx on password_tokens (user_id);
   -- When the person accepted the privacy policy (self-registration, or setting a password from an invitation).
   alter table users add column if not exists privacy_accepted_at timestamptz;
+  -- Set when an admin cancels the client's membership (status Cancelled); cleared when it's restored.
+  alter table clients add column if not exists cancelled_at timestamptz;
   -- Every email the app tried to send (sent, failed or skipped because email isn't set up), kept 180 days.
   create table if not exists email_log (
     id bigserial primary key,
@@ -140,6 +143,37 @@ const schema = `
     created_at timestamptz not null default now()
   );
   create index if not exists email_log_to_idx on email_log (to_email);
+  -- Blog / resources for the public site (SEO). Body is a small Markdown subset rendered by lib/markdown.ts.
+  create table if not exists posts (
+    id bigserial primary key,
+    slug text not null unique,
+    title text not null,
+    excerpt text not null default '',
+    body text not null default '',
+    cover_url text,
+    published boolean not null default false,
+    published_at timestamptz,
+    created_at timestamptz not null default now(),
+    updated_at timestamptz not null default now()
+  );
+  create index if not exists posts_published_idx on posts (published, published_at desc);
+  -- Daily totals synced from the member's phone (Health Connect on Android, HealthKit on iOS) by the mobile app.
+  -- The phone sends the platform's own de-duplicated daily aggregates, so a band and the phone are never double-counted.
+  create table if not exists health_daily (
+    user_id text not null references users(id) on delete cascade,
+    day date not null,
+    platform text not null check (platform in ('android', 'ios')),
+    steps integer,
+    active_kcal integer,
+    resting_hr integer,
+    sleep_min integer,
+    workouts integer,
+    workout_min integer,
+    weight_kg numeric(5, 1),
+    sources text[] not null default '{}',
+    updated_at timestamptz not null default now(),
+    primary key (user_id, day)
+  );
   create table if not exists login_attempts (
     key text primary key,
     count integer not null,
@@ -153,6 +187,7 @@ async function prepare(sql: Sql) {
     await tx.unsafe(schema);
     await tx`insert into settings (key, value) values ('price', '299') on conflict (key) do nothing`;
     await bootstrapAdmin(tx);
+    await seedStarterPosts(tx);
   });
   return sql;
 }
@@ -170,6 +205,19 @@ async function bootstrapAdmin(tx: postgres.TransactionSql) {
   await tx`insert into users (id, email, name, initials, role, password_hash) values
     (${id}, ${email}, 'Super admin', 'SA', 'admin', ${password.length >= 10 ? hashPassword(password) : null})
     on conflict do nothing`;
+}
+
+/** Publishes the starter articles once. Deleting them later is respected: the flag stops them coming back. */
+async function seedStarterPosts(tx: postgres.TransactionSql) {
+  const [done] = await tx`select 1 from settings where key = 'blog_seeded'`;
+  if (done) return;
+  for (const [i, p] of starterPosts.entries()) {
+    // Spread the dates a few days apart so the list has a natural order (newest first).
+    await tx`insert into posts (slug, title, excerpt, body, published, published_at)
+      values (${p.slug}, ${p.title}, ${p.excerpt}, ${p.body}, true, now() - make_interval(days => ${(starterPosts.length - i) * 3}))
+      on conflict (slug) do nothing`;
+  }
+  await tx`insert into settings (key, value) values ('blog_seeded', '1') on conflict (key) do nothing`;
 }
 
 /** The ready-to-use connection; the first call creates the schema. */

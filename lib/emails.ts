@@ -1,5 +1,6 @@
 import "server-only";
 import {siteLink, type Email} from "./mail";
+import {PAYMENTS_ENABLED} from "./features";
 
 /*
  * Every email RepCount sends, in one place. Each one has a plain-text and an HTML version built from the same lines,
@@ -40,11 +41,13 @@ type Member = {id: string; name: string; email: string | null | undefined};
 export const emails = {
   welcome: (m: Member) => render({to: m.email, kind: "welcome", subject: "Welcome to RepCount",
     lines: [`Hi ${first(m.name)}, your RepCount account is ready.`,
-      "Next, the team verifies your payment and matches you with a trainer. We’ll email you at each step. If you haven’t added your payment reference yet, you can do it on your Profile."],
+      PAYMENTS_ENABLED
+        ? "Next, the team verifies your payment and matches you with a trainer. We’ll email you at each step. If you haven’t added your payment reference yet, you can do it on your Profile."
+        : "Next, the team matches you with a trainer. We’ll email you as soon as they’re assigned."],
     cta: {label: "Open RepCount", path: "/member/overview"}}),
 
   newRegistration: (admin: Person, m: Member) => render({to: admin.email, kind: "admin_new_member", subject: `New member: ${m.name}`,
-    lines: [`${m.name} (${m.email}) just created an account. They’re in payment review until you verify their payment and assign a trainer.`],
+    lines: [PAYMENTS_ENABLED ? `${m.name} (${m.email}) just created an account. They’re in payment review until you verify their payment and assign a trainer.` : `${m.name} (${m.email}) just created an account. Assign them a trainer to get them started.`],
     cta: {label: "Open their page", path: `/admin/clients/${m.id}`}}),
 
   paymentReference: (admin: Person, m: Member, reference: string) => render({to: admin.email, kind: "admin_payment_reference", subject: `${m.name} sent a payment reference`,

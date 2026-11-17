@@ -1,0 +1,88 @@
+{
+  "expo": {
+    "name": "RepCount",
+    "slug": "repcount",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/images/icon.png",
+    "scheme": "repcount",
+    "userInterfaceStyle": "automatic",
+    "ios": {
+      "bundleIdentifier": "com.tryrepcount.app",
+      "buildNumber": "1",
+      "supportsTablet": false,
+      "icon": "./assets/expo.icon",
+      "config": {
+        "usesNonExemptEncryption": false
+      }
+    },
+    "android": {
+      "package": "com.tryrepcount.app",
+      "versionCode": 1,
+      "adaptiveIcon": {
+        "backgroundColor": "#FBF7F0",
+        "foregroundImage": "./assets/images/android-icon-foreground.png",
+        "backgroundImage": "./assets/images/android-icon-background.png",
+        "monochromeImage": "./assets/images/android-icon-monochrome.png"
+      },
+      "permissions": [
+        "android.permission.health.READ_STEPS",
+        "android.permission.health.READ_ACTIVE_CALORIES_BURNED",
+        "android.permission.health.READ_RESTING_HEART_RATE",
+        "android.permission.health.READ_SLEEP",
+        "android.permission.health.READ_EXERCISE",
+        "android.permission.health.READ_WEIGHT"
+      ],
+      "blockedPermissions": [
+        "android.permission.SYSTEM_ALERT_WINDOW",
+        "android.permission.RECORD_AUDIO"
+      ],
+      "predictiveBackGestureEnabled": false
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#FBF7F0",
+          "image": "./assets/images/splash-icon.png",
+          "imageWidth": 76
+        }
+      ],
+      [
+        "expo-secure-store",
+        {
+          "configureAndroidBackup": true,
+          "faceIDPermission": false
+        }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "compileSdkVersion": 36,
+            "targetSdkVersion": 36,
+            "minSdkVersion": 26
+          }
+        }
+      ],
+      "react-native-health-connect",
+      [
+        "@kingstinct/react-native-healthkit",
+        {
+          "NSHealthShareUsageDescription": "RepCount reads your daily steps, sleep, resting heart rate, active energy, workouts and weight so your trainer can see your progress and adjust your plan.",
+          "NSHealthUpdateUsageDescription": "RepCount does not write to Apple Health.",
+          "background": false
+        }
+      ],
+      "expo-web-browser"
+    ],
+    "extra": {
+      "apiUrl": "https://www.tryrepcount.com"
+    },
+    "experiments": {
+      "typedRoutes": true,
+      "reactCompiler": true
+    }
+  }
+}

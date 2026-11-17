@@ -1,5 +1,6 @@
 "use client";
 
+import {PAYMENTS_ENABLED} from "@/lib/features";
 import {useState} from "react";
 import {useRouter} from "next/navigation";
 import Modal from "./Modal";
@@ -35,8 +36,10 @@ export function MembershipEditor({client: c, pending, run}: {client: ClientRow; 
     <button type="button" className="small-button" onClick={() => {setForm(initial()); e.show();}}>Edit membership</button>
     <Modal open={e.open} eyebrow="MEMBERSHIP" title={`${c.name.split(" ")[0]}’s membership`} onClose={e.close}>
       <form className="rc-modal-form" onSubmit={ev => {ev.preventDefault(); e.submit(run, () => editMembership(c.id, form));}}>
+        {PAYMENTS_ENABLED && <>
         <label className="field">Payment<select value={form.paid ? "yes" : "no"} onChange={ev => setForm({...form, paid: ev.target.value === "yes"})}><option value="yes">Verified</option><option value="no">Not verified (back to payment review)</option></select></label>
         <label className="field">Payment reference<input value={form.reference} onChange={ev => setForm({...form, reference: ev.target.value})} maxLength={60} autoComplete="off"/></label>
+        </>}
         <div className="rc-modal-row">
           <label className="field">Joined on<input type="date" value={form.joinedOn} onChange={ev => setForm({...form, joinedOn: ev.target.value})}/></label>
           <label className="field">Next check-in<input value={form.nextCheckIn} onChange={ev => setForm({...form, nextCheckIn: ev.target.value})} maxLength={60} placeholder="e.g. Fri · 6:00 PM"/></label>

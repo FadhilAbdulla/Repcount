@@ -63,6 +63,9 @@ select:disabled{cursor:not-allowed;opacity:.65}
   .notice{animation:rc-rise .3s ease both}
 }
 
+/* A closed pop-up never takes up space or shows its border, whatever layout rule its parent applies. */
+dialog:not([open]){display:none!important}
+
 /* The in-app top bar stays pinned while the page scrolls. */
 .topbar{position:sticky;top:0;z-index:9;background:var(--paper)}
 

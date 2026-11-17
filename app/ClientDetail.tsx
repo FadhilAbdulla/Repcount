@@ -5,10 +5,12 @@ import Link from "next/link";
 import {Icon} from "./Media";
 import {LineChart, palette} from "./Tracker";
 import {activityLabels} from "./StaffApp";
-import {assignTrainer, sendResetLink, setAccountActive, verifyPayment} from "./actions/data";
+import {assignTrainer, sendResetLink, setAccountActive, setClientCancelled, verifyPayment} from "./actions/data";
 import {StaffConversation} from "./Conversation";
 import type {ClientDetail as Detail, MemberLog} from "@/lib/store";
 import {DeleteAccount, MemberLogEditor, MembershipEditor} from "./AdminEditors";
+import {StatusPill} from "./StaffApp";
+import {PAYMENTS_ENABLED} from "@/lib/features";
 import {ageFrom, memberCode} from "@/lib/programme";
 import {dayNames, formatTime, type WeekPlan} from "@/lib/schedule";
 import type {NutritionPlan} from "@/lib/nutritionPlan";
@@ -86,8 +88,11 @@ export default function ClientDetail({viewer, section, detail, trainers, coachin
       </dl></section>
 
       <section className="card"><div className="section-top"><h2>Membership &amp; coaching</h2>{admin && <MembershipEditor client={c} pending={pending} run={run}/>}</div><dl className="rc-detail-list">
-        <div><dt>Payment</dt><dd>{c.paid ? <span className="paid">Verified ✓</span> : !admin ? "Awaiting verification" : <button className="small-button" disabled={pending} onClick={() => run(() => verifyPayment(c.id))}>Verify {c.reference ?? "payment"}</button>}</dd></div>
-        <div><dt>Payment reference</dt><dd>{c.reference ?? "—"}</dd></div>
+        <div><dt>Status</dt><dd><StatusPill client={c}/>{admin && <> <button className="small-button" disabled={pending} onClick={() => { if (c.cancelled || confirm(`Cancel ${c.name}’s membership? You can restore it later.`)) run(() => setClientCancelled(c.id, !c.cancelled)); }}>{c.cancelled ? "Restore membership" : "Cancel membership"}</button></>}</dd></div>
+        {PAYMENTS_ENABLED ? <>
+          <div><dt>Payment</dt><dd>{c.paid ? <span className="paid">Verified ✓</span> : !admin ? "Awaiting verification" : <button className="small-button" disabled={pending} onClick={() => run(() => verifyPayment(c.id))}>Verify {c.reference ?? "payment"}</button>}</dd></div>
+          <div><dt>Payment reference</dt><dd>{c.reference ?? "—"}</dd></div>
+        </> : <div><dt>Payment</dt><dd className="rc-muted">Coming in phase 2</dd></div>}
         <div><dt>Trainer</dt><dd>{admin ? <select aria-label={`Trainer for ${c.name}`} value={c.trainerId ?? ""} disabled={pending} onChange={e => {const trainerId = e.target.value; run(() => assignTrainer(c.id, trainerId));}}><option value="">Unassigned</option>{trainers.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}</select> : c.trainer}</dd></div>
         <div><dt>Trains</dt><dd>{c.intake ? `${c.intake.place} · ${c.intake.days}` : "—"}</dd></div>
         <div><dt>Latest check-in</dt><dd>{c.checkinNote ? `“${c.checkinNote}”` : "—"}</dd></div>
