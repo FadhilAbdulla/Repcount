@@ -3,6 +3,7 @@
 import {useState} from "react";
 import {useRouter} from "next/navigation";
 import Modal from "./Modal";
+import PasswordInput from "./PasswordInput";
 import {Icon} from "./Media";
 import {addAdmin, changeMyPassword, deleteAdmin, deleteClient, saveEmailSettings, sendTestEmail, deleteTrainer, editAdmin, editMemberLog, editMembership, setAccountActive} from "./actions/data";
 import type {ClientRow, MemberLog} from "@/lib/store";
@@ -107,9 +108,9 @@ export function DeleteAccount({kind, id, name, pending, run}: {kind: "client" | 
     : "their admin sign-in. The activity log keeps a record of what they did";
   const remove = kind === "client" ? deleteClient : kind === "trainer" ? deleteTrainer : deleteAdmin;
   return <>
-    <button type="button" className={kind === "client" ? "button outline rc-danger" : "text-button rc-danger"} onClick={() => {setTyped(""); e.show();}}>Delete {kind} permanently</button>
+    <button type="button" className={kind === "client" ? "button outline rc-danger" : kind === "admin" ? "small-button rc-danger" : "button outline rc-danger"} onClick={() => {setTyped(""); e.show();}}>{kind === "admin" ? "Delete" : `Delete ${kind} permanently`}</button>
     <Modal open={e.open} eyebrow="PERMANENT" title={`Delete ${name}?`} onClose={e.close}>
-      <form className="rc-modal-form" onSubmit={ev => {ev.preventDefault(); e.submit(run, () => remove(id, typed), () => { if (kind === "client") router.push("/admin?tab=clients"); });}}>
+      <form className="rc-modal-form" onSubmit={ev => {ev.preventDefault(); e.submit(run, () => remove(id, typed), () => { if (kind !== "admin") router.push(`/admin?tab=${kind}s`); });}}>
         <p>This deletes {what}. It can’t be undone. To deactivate instead, use Deactivate.</p>
         <label className="field">Type <b>{name}</b> to confirm<input value={typed} onChange={ev => setTyped(ev.target.value)} autoComplete="off" required/></label>
         {e.error && <p className="rc-modal-error" role="alert">{e.error}</p>}
@@ -125,21 +126,28 @@ export function AdminAccounts({admins, selfEmail, pending, run}: {admins: AdminA
   const [form, setForm] = useState(empty);
   const e = useEditor();
   const adding = form.id === "";
-  return <section className="card"><div className="section-top"><h2>Admin accounts</h2><button type="button" className="small-button" onClick={() => {setForm(empty); e.show();}}>+ Add admin</button></div>
-    <ul className="rc-admin-list">{admins.map(a => {
-      const self = a.email === selfEmail;
-      return <li key={a.id}><div><b>{a.name}{self && " (you)"}</b><small>{a.email} · {a.active ? (a.canUsePassword ? "password or Google" : "Google sign-in") : "deactivated"}</small></div>
-        <span>
-          <button type="button" className="text-button" onClick={() => {setForm({id: a.id, name: a.name, email: a.email, password: ""}); e.show();}}>Edit</button>
-          {!self && <button type="button" className="text-button" disabled={pending} onClick={() => run(() => setAccountActive(a.id, !a.active))}>{a.active ? "Deactivate" : "Reactivate"}</button>}
-          {!self && <DeleteAccount kind="admin" id={a.id} name={a.name} pending={pending} run={run}/>}
-        </span></li>;
-    })}</ul>
+  return <section className="card"><div className="section-top"><h2>All admins</h2><button type="button" className="button dark" onClick={() => {setForm(empty); e.show();}}><Icon name="plus" size={16}/> Admin</button></div>
+    <div className="table-scroll"><table className="rc-cards"><thead><tr><th>Admin</th><th>Email</th><th>Sign-in</th><th>Status</th><th><span className="visually-hidden">Actions</span></th></tr></thead><tbody>
+      {admins.map(a => {
+        const self = a.email === selfEmail;
+        return <tr key={a.id}>
+          <td data-label="Admin"><span className="client-name"><span className="avatar">{a.name.split(/\s+/).map(w => w[0]).join("").slice(0, 2).toUpperCase()}</span><span><b>{a.name}{self && " (you)"}</b></span></span></td>
+          <td data-label="Email">{a.email}</td>
+          <td data-label="Sign-in">{a.canUsePassword ? "Password or Google" : "Google"}</td>
+          <td data-label="Status"><span className="rc-pay-status" data-status={a.active ? "verified" : "not-submitted"}>{a.active ? "Active" : "Deactivated"}</span></td>
+          <td data-label="" className="rc-row-actions">
+            <button type="button" className="small-button" onClick={() => {setForm({id: a.id, name: a.name, email: a.email, password: ""}); e.show();}}>Edit</button>
+            {!self && <button type="button" className="small-button" disabled={pending} onClick={() => run(() => setAccountActive(a.id, !a.active))}>{a.active ? "Deactivate" : "Reactivate"}</button>}
+            {!self && <DeleteAccount kind="admin" id={a.id} name={a.name} pending={pending} run={run}/>}
+          </td>
+        </tr>;
+      })}
+    </tbody></table></div>
     <Modal open={e.open} eyebrow="ADMIN ACCOUNTS" title={adding ? "Add an admin" : `Edit ${form.name || "admin"}`} onClose={e.close}>
       <form className="rc-modal-form" onSubmit={ev => {ev.preventDefault(); e.submit(run, () => adding ? addAdmin(form) : editAdmin(form.id, form));}}>
         <label className="field">Full name<input value={form.name} onChange={ev => setForm({...form, name: ev.target.value})} required maxLength={40} autoComplete="off"/></label>
         <label className="field">Email (Google account)<input type="email" value={form.email} onChange={ev => setForm({...form, email: ev.target.value})} required autoComplete="off"/></label>
-        <label className="field">{adding ? "Password (optional)" : "New password (optional)"}<input type="password" value={form.password} onChange={ev => setForm({...form, password: ev.target.value})} minLength={10} autoComplete="new-password" placeholder={adding ? "Blank sends an invitation link" : "Leave blank to keep the current one"}/></label>
+        <label className="field">{adding ? "Password (optional)" : "New password (optional)"}<PasswordInput value={form.password} onChange={ev => setForm({...form, password: ev.target.value})} minLength={10} autoComplete="new-password" placeholder={adding ? "Blank sends an invitation link" : "Leave blank to keep the current one"}/></label>
         {e.error && <p className="rc-modal-error" role="alert">{e.error}</p>}
         <button className="button dark" type="submit" disabled={pending}>{pending ? "Saving…" : adding ? "Add admin" : "Save changes"} →</button>
       </form>
@@ -153,21 +161,20 @@ export function ChangePassword({hasPassword, pending, run}: {hasPassword: boolea
   const [form, setForm] = useState(empty);
   const [error, setError] = useState("");
   const mismatch = form.confirm !== "" && form.confirm !== form.next;
-  return <section className="card"><h2>Change my password</h2>
+  return <section className="card">
     {!hasPassword && <p className="small-note">You sign in with Google. Set a password to also sign in with your email.</p>}
     <form className="rc-modal-form" onSubmit={ev => {ev.preventDefault(); setError(""); run(async () => {
       const result = await changeMyPassword(form);
       if (result.ok) setForm(empty); else setError(result.error ?? "");
       return result;
     });}}>
-      {hasPassword && <label className="field">Current password<input type="password" value={form.current} onChange={ev => setForm({...form, current: ev.target.value})} required autoComplete="current-password"/></label>}
+      {hasPassword && <label className="field">Current password<PasswordInput value={form.current} onChange={ev => setForm({...form, current: ev.target.value})} required autoComplete="current-password"/></label>}
       <div className="rc-modal-row">
-        <label className="field">New password<input type="password" value={form.next} onChange={ev => setForm({...form, next: ev.target.value})} required minLength={10} maxLength={200} autoComplete="new-password" placeholder="At least 10 characters"/></label>
-        <label className="field">Repeat new password<input type="password" value={form.confirm} onChange={ev => setForm({...form, confirm: ev.target.value})} required minLength={10} maxLength={200} autoComplete="new-password"/></label>
+        <label className="field">New password<PasswordInput value={form.next} onChange={ev => setForm({...form, next: ev.target.value})} required minLength={10} maxLength={200} autoComplete="new-password" placeholder="At least 10 characters"/></label>
+        <label className="field">Repeat new password<PasswordInput value={form.confirm} onChange={ev => setForm({...form, confirm: ev.target.value})} required minLength={10} maxLength={200} autoComplete="new-password"/></label>
       </div>
       {mismatch && <p className="rc-modal-error" role="alert">The two new passwords don’t match.</p>}
       {error && <p className="rc-modal-error" role="alert">{error}</p>}
-      <p className="small-note">Changing it signs you out on your other devices.</p>
       <button className="button dark" type="submit" disabled={pending || mismatch}>{pending ? "Saving…" : "Change password"} →</button>
     </form>
   </section>;
@@ -186,7 +193,7 @@ export function EmailSettings({status, recent, selfEmail, pending, run}: {status
     return result;
   }); };
   const hasAdminKey = status.source === "admin" || status.keyUnreadable;
-  return <section className="card"><div className="section-top"><h2>Email</h2>
+  return <section className="card"><div className="section-top"><h3>Resend connection</h3>
     <span className={`pill${status.configured ? "" : " rc-pill-warn"}`}>{status.configured ? `CONNECTED${status.source === "env" ? " · FROM ENVIRONMENT" : ""}` : "NOT SET UP"}</span></div>
     <p className="small-note">RepCount sends sign-up, payment, trainer, plan, check-in, message and password emails through <a href="https://resend.com" target="_blank" rel="noreferrer">Resend</a>. Create an API key under Resend → API Keys, and verify your domain under Domains so you can send from it.</p>
     {status.keyUnreadable && <p className="rc-modal-error" role="alert">The saved API key can’t be read any more (the session secret changed). Enter it again.</p>}

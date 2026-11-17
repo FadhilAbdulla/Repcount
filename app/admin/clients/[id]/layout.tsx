@@ -1,10 +1,6 @@
-import {notFound} from "next/navigation";
-import {requireRole} from "@/lib/dal";
-import {getClient} from "@/lib/store";
+import ClientShell from "../../../ClientShell";
 
-/* Unknown clients are a real 404: checked here, before the loading screen (loading.tsx) starts streaming. */
+/* Sidebar, client header and section tabs stay mounted across this client's pages; unknown clients are a real 404. */
 export default async function AdminClientLayout({children, params}: {children: React.ReactNode; params: Promise<{id: string}>}) {
-  const [, client] = await Promise.all([requireRole("admin"), params.then(p => getClient(p.id))]);
-  if (!client) notFound();
-  return children;
+  return <ClientShell viewer="admin" id={(await params).id}>{children}</ClientShell>;
 }

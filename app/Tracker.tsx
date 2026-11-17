@@ -332,9 +332,10 @@ export function StaffInsights({clients}: {clients: StaffClient[]}) {
   const planned = scheduled.reduce((s, c) => s + c.weekPlanned, 0);
   const doneTotal = scheduled.reduce((s, c) => s + c.weekDone, 0);
   const avg = planned ? Math.round((doneTotal / planned) * 100) : 0;
-  const trainers = ["Akif", "Unassigned"].map(n => ({label: n, value: clients.filter(c => (n === "Akif" ? c.trainer !== "Unassigned" : c.trainer === "Unassigned")).length}));
+  const assigned = clients.filter(c => c.trainer !== "Unassigned").length;
+  const trainers = [{label: "Assigned", value: assigned}, {label: "Unassigned", value: clients.length - assigned}];
   return <section className="card tk-panel tk-wide" aria-labelledby="tk-staff-title">
-    <span className="eyebrow">COHORT SNAPSHOT</span><h2 id="tk-staff-title">How the cohort is doing.</h2>
+    <span className="eyebrow">CLIENT SNAPSHOT</span><h2 id="tk-staff-title">How your clients are doing.</h2>
     <div className="tk-grid-3 tk-inner">
       <div><h3>Where clients are</h3><Donut label="Clients by stage" centerBig={String(clients.length)} centerSmall="clients" slices={stageSlices}/></div>
       <div><h3>Workouts done this week</h3>{scheduled.length ? <BarChart label="Workouts done out of planned this week, per client" unit="workouts" color={palette.sage} bars={scheduled.map(c => ({label: c.name.split(" ")[0], value: c.weekDone, planned: c.weekPlanned}))} format={n => String(n)} rowLabel="Client"/> : <p className="tk-caption">No workouts are planned for this week yet.</p>}<p className="tk-caption"><b>{doneTotal} of {planned}</b> planned workouts done ({avg}%) · {scheduled.length} of {clients.length} clients have a plan this week</p></div>

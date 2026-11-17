@@ -74,7 +74,7 @@ test('production opens public coaching with an optional member demo', async () =
 test('pilot preserves confirmed scope and distinguishes future services', async () => {
  const text = readableText(await productionHomepage());
  assert.match(text, /AED\s*299\s*\/\s*30 days/);
- assert.match(text, /10\s+adults in the\s+first India cohort/);
+ assert.match(text, /1:1\s+a personal trainer\s+for every client/);
  assert.match(text, /Adults 18\+/);
   assert.match(text, /Weekly trainer follow-ups/);
  assert.match(text, /Manual payment, verified by the team/);
@@ -146,7 +146,7 @@ test('each role reaches only its own dashboard', async () => {
  assert.equal((await visit('/admin', member)).headers.get('location')?.endsWith('/member/overview'), true);
  assert.equal((await visit('/member/plan', trainer)).headers.get('location')?.endsWith('/trainer'), true);
  assert.match(readableText(await (await visit('/trainer', trainer)).text()), /TRAINER WORKSPACE/);
- assert.match(readableText(await (await visit('/admin', admin)).text()), /SUPER ADMIN/);
+ assert.match(readableText(await (await visit('/admin', admin)).text()), /ADMIN/);
  assert.equal((await visit('/login', admin)).headers.get('location')?.endsWith('/admin'), true);
  assert.equal((await visit('/member/unknown', member)).status, 404);
 });
@@ -651,8 +651,8 @@ test('admins manage admin accounts, but never deactivate themselves', async () =
  assert.match((await callAction('app/actions/data.ts', 'addAdmin', [{name: 'Dup', email: 'admin2@example.com', password: ''}], admin, '/admin')).error ?? '', /already exists/);
  const [second] = await sql`select id, role from users where email = 'admin2@example.com'`;
  assert.equal(second.role, 'admin');
- const settings = readableText(await (await visit('/admin?tab=settings', admin)).text());
- assert.match(settings, /Admin accounts/);
+ const settings = readableText(await (await visit('/admin?tab=admins', admin)).text());
+ assert.match(settings, /All admins/);
  assert.match(settings, /Second Admin/);
  assert.match(settings, /Super admin \(you\)/);
  const edited = await callAction('app/actions/data.ts', 'editAdmin', [second.id, {name: 'Second Admin', email: 'admin.two@example.com', password: ''}], admin, '/admin');
@@ -684,7 +684,7 @@ test('ADMIN_EMAIL creates the first admin once; a too-short ADMIN_PASSWORD is ig
 test('an admin changes their own password in Settings', async () => {
  const id = (await sql`select id from users where email = 'owner@example.com'`)[0].id;
  const owner = await currentCookie(id, 'admin');
- assert.match(readableText(await (await visit('/admin?tab=settings', owner)).text()), /Change my password.*You sign in with Google/);
+ assert.match(readableText(await (await visit('/admin?tab=settings', owner)).text()), /Your password.*You sign in with Google/);
  // A Google-only admin sets a first password without a current one.
  const first = await callAction('app/actions/data.ts', 'changeMyPassword', [{current: '', next: 'OwnerPass#2026', confirm: 'OwnerPass#2026'}], owner, '/admin');
  assert.match(first.ok ?? JSON.stringify(first), /Password changed/);

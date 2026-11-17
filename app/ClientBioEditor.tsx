@@ -2,6 +2,7 @@
 
 import {useState} from "react";
 import Modal from "./Modal";
+import {Icon} from "./Media";
 import {editClientDetails} from "./actions/data";
 import {genders, goals, places, rhythms} from "@/lib/programme";
 import type {ClientRow} from "@/lib/store";
@@ -21,7 +22,7 @@ export default function ClientBioEditor({client: c, pending, run}: {client: Clie
   // A goal typed by staff before the fixed list existed stays selectable.
   const goalOptions = (goals as readonly string[]).includes(c.goal) || !c.goal ? goals : [c.goal, ...goals];
   return <>
-    <button type="button" className="button outline" onClick={() => {setForm(initial()); setError(""); setOpen(true);}}>Edit details</button>
+    <button type="button" className="button outline rc-edit-button" onClick={() => {setForm(initial()); setError(""); setOpen(true);}}><Icon name="edit" size={16}/> Edit details</button>
     <Modal open={open} eyebrow="CLIENT PROFILE" title={`Edit ${c.name.split(" ")[0]}’s details`} onClose={() => setOpen(false)}>
       <form className="rc-modal-form" onSubmit={e => {e.preventDefault(); run(async () => {const result = await editClientDetails(c.id, form); if (result.ok) setOpen(false); else setError(result.error ?? ""); return result;});}}>
         <label className="field">Full name<input value={form.name} onChange={e => set({name: e.target.value})} required maxLength={60} autoComplete="off"/></label>

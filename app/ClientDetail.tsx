@@ -5,12 +5,11 @@ import Link from "next/link";
 import {Icon} from "./Media";
 import {LineChart, palette} from "./Tracker";
 import {activityLabels} from "./StaffApp";
-import {assignTrainer, sendResetLink, setAccountActive, setClientStage, verifyPayment} from "./actions/data";
+import {assignTrainer, sendResetLink, setAccountActive, verifyPayment} from "./actions/data";
 import {StaffConversation} from "./Conversation";
 import type {ClientDetail as Detail, MemberLog} from "@/lib/store";
 import {DeleteAccount, MemberLogEditor, MembershipEditor} from "./AdminEditors";
-import {ageFrom, memberCode, stages} from "@/lib/programme";
-import ClientBioEditor from "./ClientBioEditor";
+import {ageFrom, memberCode} from "@/lib/programme";
 import {dayNames, formatTime, type WeekPlan} from "@/lib/schedule";
 import type {NutritionPlan} from "@/lib/nutritionPlan";
 import {DayEditor, WeekOverview} from "./ScheduleEditor";
@@ -21,7 +20,6 @@ export type Coaching = {weeks: {start: string; label: string}[]; plans: Record<s
 
 /* A trainer's member page is split into sections, each at its own URL under /trainer/clients/[id]. */
 export type MemberSection = "overview" | "workouts" | "nutrition" | "progress";
-const sections: [MemberSection, string, string][] = [["overview", "Overview", ""], ["workouts", "Workout plan", "/workouts"], ["nutrition", "Nutrition", "/nutrition"], ["progress", "Progress & history", "/progress"]];
 
 const formatDate = (iso: string | null) => iso ? new Date(`${iso.length === 10 ? iso + "T00:00:00Z" : iso.replace(" ", "T") + "Z"}`).toLocaleDateString("en-GB", {day: "numeric", month: "short", year: "numeric", timeZone: "UTC"}) : "—";
 
@@ -51,17 +49,8 @@ export default function ClientDetail({viewer, section, detail, trainers, coachin
   const scheduled = plan?.filter(Boolean).length ?? 0;
 
   return <>
-    <Link className="rc-back-link" href={`/${viewer}?tab=clients`}>← {admin ? "All clients" : "All members"}</Link>
-    <div className="page-heading rc-detail-heading">
-      <div className="rc-detail-identity"><span className="large-avatar">{c.initials}</span><div><p className="eyebrow">{admin ? "CLIENT PROFILE" : "MEMBER"} · {memberCode(c.memberNo)}</p><h1 tabIndex={-1}>{c.name}</h1><p>{c.goal} · joined {formatDate(c.joinedOn)}{!c.intake && <> · <span className="pill rc-pill-warn" title="Completes when the member answers the onboarding questions">Profile incomplete</span></>}</p></div></div>
-      {admin && <ClientBioEditor client={c} pending={pending} run={run}/>}
-      {admin ? <label className="rc-detail-stage"><span className="eyebrow">Stage</span><select aria-label={`Stage for ${c.name}`} value={c.stage} disabled={pending} onChange={e => {const stage = e.target.value; run(() => setClientStage(c.id, stage));}}>{stages.map(s => <option key={s}>{s}</option>)}</select></label> : <span className="pill">{c.stage}</span>}
-    </div>
     {notice && <div className={noticeError ? "notice notice-error" : "notice"} role={noticeError ? "alert" : "status"}>{notice}<button onClick={() => setNotice("")} aria-label="Dismiss notification"><Icon name="close" size={18}/></button></div>}
 
-    {section && <nav className="rc-member-tabs" aria-label={`${c.name}’s pages`}>
-      {sections.map(([key, label, path]) => <Link key={key} href={base + path} aria-current={section === key ? "page" : undefined}>{label}</Link>)}
-    </nav>}
 
     {shows("overview") && <>
     <div className="three-grid metrics">

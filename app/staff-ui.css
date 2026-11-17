@@ -1,0 +1,151 @@
+/* Admin and trainer workspace: page headings, client/trainer headers, tables, payments, settings and the top bar.
+   Loaded after staff.css and admin.css, so these rules win where they overlap. */
+
+/* ---------- Top bar: who is signed in, on the right ---------- */
+.rc-staff .topbar{letter-spacing:0}
+.rc-staff .rc-topbar-status{font-size:12px;color:#7a7f73;letter-spacing:0}
+.rc-staff .rc-topbar-user{display:flex;align-items:center;gap:12px}
+.rc-staff .rc-topbar-user>div{display:flex;flex-direction:column;align-items:flex-end;line-height:1.25;min-width:0}
+.rc-staff .rc-topbar-user b{font-size:13px;font-weight:600;color:#252822;letter-spacing:0}
+.rc-staff .rc-topbar-user small{font-size:11.5px;color:#7a7f73;letter-spacing:0;max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rc-staff .rc-topbar-user .top-avatar{width:38px;height:38px;font-size:12px;background:#f9e9e6;color:#c71331;border:0}
+
+.rc-topbar-logout{display:none}
+@media(max-width:850px){
+  .rc-staff .rc-topbar-user>div{display:none}
+  .rc-topbar-logout{display:block}
+  .rc-topbar-logout button{display:grid;place-items:center;width:38px;height:38px;border-radius:50%;border:1px solid #e1ddd3;color:#5d6056}
+}
+
+/* ---------- Sidebar: log out at the bottom ---------- */
+.rc-staff .sidebar-bottom{padding-top:14px;border-top:1px solid #e9e5dd}
+.rc-staff .sidebar-bottom form{display:block}
+.rc-staff .sidebar-bottom .rc-sidebar-logout{display:flex;align-items:center;justify-content:flex-start;gap:10px;width:100%;min-height:44px;padding:0 14px;border-radius:10px;font-size:14px;font-weight:600;color:#4a4e45}
+.rc-staff .sidebar-bottom .rc-sidebar-logout:hover{background:#e5193714;color:#c71331;filter:none}
+
+/* ---------- Page heading with an action on the right ---------- */
+.rc-staff .rc-page-heading{align-items:flex-end;margin-bottom:18px}
+.rc-staff .rc-page-heading>.button{flex:0 0 auto;gap:8px;justify-content:center;padding:0 18px;min-height:44px;font-size:13px;font-weight:600;margin-bottom:18px}
+.rc-staff .button.dark{gap:8px}
+
+/* ---------- KPI cards ---------- */
+.rc-kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px;margin-bottom:22px}
+.rc-kpis-5{grid-template-columns:repeat(5,minmax(0,1fr))}
+.rc-kpis .card{padding:20px 22px;display:flex;flex-direction:column;gap:6px}
+.rc-kpis .eyebrow{font-size:10px}
+.rc-kpis strong{font-size:30px;font-weight:600;letter-spacing:-1px;line-height:1.1;color:#252822;font-family:'Manrope',Arial,sans-serif}
+.rc-kpis small{font-size:12px;color:#7a7f73}
+.rc-staff .metrics small{display:block;font-size:12px;color:#7a7f73;margin-top:4px}
+@media(max-width:1100px){.rc-kpis,.rc-kpis-5{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:520px){.rc-kpis strong{font-size:24px}.rc-kpis .card{padding:16px}}
+
+/* ---------- Overview lists ---------- */
+.rc-overview-grid{margin-bottom:22px}
+.rc-attention,.rc-mini-list{list-style:none;margin:0;padding:0;display:grid}
+.rc-attention li{display:grid;grid-template-columns:44px 1fr auto;align-items:center;gap:14px;padding:12px 0;border-top:1px solid #efebe3}
+.rc-attention li:first-child,.rc-mini-list li:first-child{border-top:0}
+.rc-attention strong{display:grid;place-items:center;width:44px;height:44px;border-radius:12px;background:#f9e9e6;color:#c71331;font-size:17px;font-family:'Manrope',Arial,sans-serif}
+.rc-attention span{font-size:14px;color:#3d4138}
+.rc-attention .small-button,.rc-overview-grid .section-top .small-button{min-height:36px;padding:0 12px;font-size:12px;font-weight:600;white-space:nowrap}
+.rc-mini-list li{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:11px 0;border-top:1px solid #efebe3}
+
+/* ---------- Client and trainer links in tables ---------- */
+.rc-staff a.rc-client-link{display:flex;flex-direction:row;align-items:center;gap:12px;text-decoration:none;color:inherit;min-width:0}
+.rc-staff .rc-client-link>span:last-child{display:flex;flex-direction:column;min-width:0}
+.rc-staff .rc-client-link b{font-size:14px;font-weight:600;color:#252822}
+.rc-staff a.rc-client-link small{font-size:12px;color:#7a7f73;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rc-staff a.rc-client-link:hover b{color:#c71331;text-decoration:underline;text-underline-offset:3px}
+.rc-staff .rc-client-link .avatar{background:#f1ede4;color:#5d6056}
+.rc-inline-select{min-height:38px;padding:0 30px 0 10px;border:1px solid #e1ddd3;border-radius:8px;background-color:#fffdf8;font:inherit;font-size:13px;color:#252822;max-width:200px}
+.rc-row-actions{text-align:right;white-space:nowrap}
+.rc-row-actions>*{display:inline-flex;align-items:center;justify-content:center;vertical-align:middle}
+.rc-row-actions>*+*{margin-left:8px}
+.rc-staff .rc-row-actions .small-button{min-height:34px;padding:0 12px;font-size:12px;font-weight:600;background:#fffdf8;border-color:#e1ddd3}
+.rc-staff .small-button.dark{background:#252822;border-color:#252822;color:#fff}
+.rc-staff .small-button.rc-danger{color:#c71331;border-color:#f0cfd3}
+.rc-muted{color:#9a9a90}
+
+/* Stage and status pills share one shape; colour comes from the data attribute. */
+.rc-stage-pill,.rc-pay-status{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:999px;font-size:12px;font-weight:600;white-space:nowrap;background:#f1ede4;color:#5d6056}
+.rc-stage-pill::before,.rc-pay-status::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor}
+[data-stage="active"].rc-stage-pill,[data-status="verified"]{background:#e6f1e3;color:#2f6b35}
+[data-stage="onboarding"].rc-stage-pill{background:#ebe8f5;color:#5b4f93}
+[data-stage="check-in-due"].rc-stage-pill,[data-status="awaiting-verification"]{background:#fbf0dc;color:#94600f}
+[data-stage="payment-review"].rc-stage-pill,[data-status="not-submitted"]{background:#f9e9e6;color:#b4182f}
+.rc-ref{font:500 12px ui-monospace,SFMono-Regular,Menlo,monospace;background:#f1ede4;padding:3px 7px;border-radius:6px;color:#3d4138}
+
+/* Segmented filter (Payments) */
+.rc-segmented{display:flex;flex-wrap:wrap;gap:4px;padding:4px;border-radius:12px;background:#efebe3;margin:0 0 16px;width:fit-content;max-width:100%}
+.rc-segmented button{display:flex;align-items:center;gap:8px;min-height:38px;padding:0 14px;border-radius:9px;font-size:13px;font-weight:600;color:#5d6056}
+.rc-segmented button span{min-width:22px;padding:1px 7px;border-radius:999px;background:#e2ddd2;font-size:11px;text-align:center}
+.rc-segmented button[aria-pressed="true"]{background:#fffdf8;color:#252822;box-shadow:0 1px 4px #2528221a}
+.rc-segmented button[aria-pressed="true"] span{background:#f9e9e6;color:#c71331}
+.rc-segmented button:hover{filter:none;color:#252822}
+
+/* ---------- Client / trainer header card ---------- */
+.rc-client-head{display:flex;align-items:center;justify-content:space-between;gap:20px 28px;flex-wrap:wrap;padding:24px 26px;margin-bottom:16px}
+.rc-client-head h1{margin:2px 0 6px;font-size:30px;letter-spacing:-1px;line-height:1.15}
+.rc-client-head .eyebrow{margin:0;font-size:10px}
+.rc-client-head .large-avatar{width:68px;height:68px;font-size:22px;background:#f9e9e6;color:#c71331}
+.rc-client-meta{display:flex;flex-wrap:wrap;align-items:center;gap:6px 14px;margin:0;font-size:13px;color:#6b6f64}
+.rc-client-meta>span:not(.pill)+span:not(.pill)::before{content:"·";margin-right:14px;color:#c5c2b8}
+.rc-client-head-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+
+/* Stage: a pill-shaped control with a coloured dot (a select for admins, a label for trainers). */
+.rc-stage-control{position:relative;display:inline-flex;align-items:center;gap:8px;height:44px;padding:0 14px;border:1px solid #e1ddd3;border-radius:999px;background:#fffdf8;font-size:13px;font-weight:600;color:#252822;--dot:#9a9a90}
+.rc-stage-control[data-stage="active"]{--dot:#3a8a43}
+.rc-stage-control[data-stage="onboarding"]{--dot:#6b5fb0}
+.rc-stage-control[data-stage="check-in-due"]{--dot:#d18a16}
+.rc-stage-control[data-stage="payment-review"]{--dot:#e51937}
+.rc-stage-dot{width:9px;height:9px;border-radius:50%;background:var(--dot);box-shadow:0 0 0 4px color-mix(in srgb,var(--dot) 16%,transparent)}
+.rc-stage-label{font-size:11px;font-weight:600;letter-spacing:.6px;text-transform:uppercase;color:#8a8c81}
+.rc-stage-control select{appearance:none;border:0;background:transparent;font:inherit;font-weight:600;color:#252822;padding:0 20px 0 0;height:100%;cursor:pointer;background-image:linear-gradient(45deg,transparent 50%,#6b6f64 50%),linear-gradient(135deg,#6b6f64 50%,transparent 50%);background-position:calc(100% - 7px) 50%,calc(100% - 3px) 50%;background-size:4px 4px;background-repeat:no-repeat}
+.rc-stage-control select:focus{outline:none}
+.rc-stage-control:has(select:focus-visible){outline:2px solid #e51937;outline-offset:2px}
+.rc-stage-control:hover:has(select){border-color:#cfcabe}
+.rc-edit-button{display:inline-flex!important;justify-content:center!important;gap:8px!important;height:44px;min-height:44px;padding:0 18px!important;border-radius:999px!important;font-size:13px!important;font-weight:600!important;background:#fffdf8;border:1px solid #e1ddd3!important;color:#252822!important;margin:0!important}
+.rc-edit-button:hover{border-color:#252822!important;filter:none}
+.rc-staff .rc-member-tabs{margin:0 0 22px}
+.rc-staff .rc-back-link{display:inline-block;margin-bottom:12px}
+@media(max-width:700px){.rc-client-head{padding:18px}.rc-client-head h1{font-size:24px}.rc-client-head-actions{width:100%}}
+
+/* Loading state for one client section (the header and tabs stay) */
+.rc-section-loading .three-grid{margin-bottom:0}
+
+/* ---------- Trainer detail: account actions ---------- */
+.rc-account-actions{list-style:none;margin:0;padding:0}
+.rc-account-actions li{display:flex;align-items:center;justify-content:space-between;gap:18px;padding:16px 0;border-top:1px solid #efebe3}
+.rc-account-actions li:first-child{border-top:0;padding-top:4px}
+.rc-account-actions b{display:block;font-size:14px;color:#252822}
+.rc-account-actions small{display:block;font-size:12.5px;color:#7a7f73;margin-top:2px}
+.rc-account-actions .button{flex:0 0 auto;min-width:140px;justify-content:center;margin:0;font-size:13px;font-weight:600}
+@media(max-width:600px){.rc-account-actions li{flex-direction:column;align-items:stretch}}
+
+/* ---------- Settings: label on the left, form card on the right ---------- */
+.rc-settings{display:grid;gap:0}
+.rc-settings-row{display:grid;grid-template-columns:minmax(200px,280px) minmax(0,1fr);gap:20px 40px;padding:28px 0;border-top:1px solid #e9e5dd}
+.rc-settings-row:first-child{border-top:0;padding-top:4px}
+.rc-settings-intro h2{font-size:17px;margin:0 0 6px}
+.rc-settings-intro p{font-size:13px;line-height:1.55;margin:0;color:#7a7f73}
+.rc-settings-row>.card{margin:0;padding:24px}
+.rc-settings-row>.card>.section-top h3{margin:0;font-size:15px}
+.rc-settings-form{display:grid;gap:18px;max-width:520px}
+.rc-input-affix{position:relative;display:block}
+.rc-input-affix input{padding-right:58px!important}
+.rc-input-affix>span{position:absolute;right:14px;top:50%;transform:translateY(-50%);font-size:13px;font-weight:600;color:#8a8c81}
+.rc-settings-facts{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:0}
+.rc-settings-facts div{padding:12px 14px;border-radius:10px;background:#f6f3ec}
+.rc-settings-facts dt{font-size:11px;letter-spacing:.5px;text-transform:uppercase;color:#8a8c81;margin-bottom:3px}
+.rc-settings-facts dd{margin:0;font-size:13.5px;font-weight:600;color:#252822}
+.rc-settings-actions .button{width:auto;min-width:150px;justify-content:center;margin:0;font-size:13px;font-weight:600}
+.rc-settings .rc-modal-form .button{width:auto;min-width:170px;justify-content:center;font-size:13px;font-weight:600}
+@media(max-width:860px){.rc-settings-row{grid-template-columns:1fr;gap:14px}.rc-settings-facts{grid-template-columns:1fr}}
+
+/* Table cell text: readable sizes */
+.rc-staff table.rc-cards td small{font-size:12px}
+.rc-staff table.rc-cards td{font-size:13.5px}
+.rc-staff .card>.small-note{margin:14px 0 0;font-size:12.5px;line-height:1.5}
+
+/* Cards that follow each other directly in a page get the same gap as everywhere else. */
+.rc-staff main>.card+.card,.rc-staff main>.card+section.card{margin-top:22px}
+.rc-settings .rc-modal-form{max-width:560px}

@@ -1,5 +1,5 @@
-import LoadingShell from "../../../LoadingShell";
+import SectionLoading from "../../../SectionLoading";
 
 export default function Loading() {
-  return <LoadingShell label="Loading client"/>;
+  return <SectionLoading label="Loading section"/>;
 }

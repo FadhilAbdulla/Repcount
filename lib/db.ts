@@ -151,7 +151,7 @@ async function prepare(sql: Sql) {
   await sql.begin(async tx => {
     await tx`select pg_advisory_xact_lock(74283015)`;
     await tx.unsafe(schema);
-    await tx`insert into settings (key, value) values ('price', '299'), ('cohortSize', '10') on conflict (key) do nothing`;
+    await tx`insert into settings (key, value) values ('price', '299') on conflict (key) do nothing`;
     await bootstrapAdmin(tx);
   });
   return sql;

@@ -20,7 +20,7 @@ export type ClientRow = {
 /** What a member told us when they registered. */
 export type Intake = {place: string; days: string};
 export {currency, stages} from "./programme";
-export type Settings = {price: string; currency: typeof currency; cohortSize: string};
+export type Settings = {price: string; currency: typeof currency};
 
 type RawClient = {
   id: string; user_id: string | null; name: string; initials: string; stage: string; trainer_id: string | null; trainer_name: string | null; paid: boolean; progress: number;
@@ -119,10 +119,10 @@ export async function getSettings(): Promise<Settings> {
   const sql = await db();
   const rows = await sql<{key: string; value: string}[]>`select key, value from settings`;
   const map = Object.fromEntries(rows.map(r => [r.key, r.value]));
-  return {price: map.price ?? "299", currency, cohortSize: map.cohortSize ?? "10"};
+  return {price: map.price ?? "299", currency};
 }
 
-export async function updateSettings(next: {price: string; cohortSize: string}) {
+export async function updateSettings(next: {price: string}) {
   const sql = await db();
   for (const [key, value] of Object.entries(next)) {
     await sql`insert into settings (key, value) values (${key}, ${value}) on conflict (key) do update set value = excluded.value`;

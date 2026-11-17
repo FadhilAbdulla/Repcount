@@ -2,8 +2,8 @@ import {notFound} from "next/navigation";
 import {requireRole} from "@/lib/dal";
 import {istToday} from "@/lib/dates";
 import {daySlugs, planningWeeks} from "@/lib/schedule";
-import {clientDetail, confirmedDays, getMemberLog, getNutritionPlan, getSettings, getWeekPlans, listClients, trainerAnalytics} from "@/lib/store";
-import StaffApp from "./StaffApp";
+import {clientDetail, confirmedDays, getMemberLog, getNutritionPlan, getWeekPlans} from "@/lib/store";
+import {listTrainers} from "@/lib/users";
 import ClientDetail, {type MemberSection} from "./ClientDetail";
 
 /**
@@ -21,16 +21,16 @@ export async function memberPage(viewer: "trainer" | "admin", id: string, sectio
   const day = at.day === undefined ? undefined : daySlugs.indexOf(at.day);
   if (at.day !== undefined && (!week || day === -1)) notFound();
   // Everything loads in one go (the database is a long round trip away); nothing is shown until access is checked.
-  const [detail, clients, settings, plans, nutrition, confirmed, trainers, log] = await Promise.all([
-    clientDetail(id), listClients(admin ? undefined : user.id), getSettings(),
+  const [detail, plans, nutrition, confirmed, trainers, log] = await Promise.all([
+    clientDetail(id),
     section === "workouts" ? getWeekPlans([id], weeks.map(w => w.start)) : {},
     section === "overview" || section === "nutrition" ? getNutritionPlan(id) : null,
     section === "overview" ? confirmedDays(id, weekStart, today) : [],
-    admin ? trainerAnalytics() : [],
+    admin ? listTrainers() : [],
     admin && section === "progress" ? getMemberLog(id) : null,
   ]);
   if (!detail || (!admin && detail.client.trainerId !== user.id)) notFound();
-  return <StaffApp area={viewer} user={{name: user.name, initials: user.initials, email: user.email}} clients={clients} settings={settings} activity={[]} trainers={trainers}
-    detail={<ClientDetail viewer={viewer} section={section} detail={detail} log={log} trainers={trainers.filter(t => t.active || t.id === detail.client.trainerId).map(t => ({id: t.id, name: t.name}))}
-      coaching={{weeks, plans, nutrition, confirmed, today, week: week ?? weeks[0].start, day}}/>}/>;
+  // The sidebar, header and tabs around this come from the [id] layout (ClientShell), so only this part loads per section.
+  return <ClientDetail viewer={viewer} section={section} detail={detail} log={log} trainers={trainers.filter(t => t.active || t.id === detail.client.trainerId).map(t => ({id: t.id, name: t.name}))}
+    coaching={{weeks, plans, nutrition, confirmed, today, week: week ?? weeks[0].start, day}}/>;
 }

@@ -127,17 +127,15 @@ export async function reviewCheckin(clientId: string): Promise<Result> {
   return {ok: `${client.name}’s check-in marked as reviewed.`};
 }
 
-/** Prices are in AED; only the amount and cohort size are editable. */
-export async function saveSettings(input: {price: string; cohortSize: string}): Promise<Result> {
+/** Prices are in AED; only the amount is editable. */
+export async function saveSettings(input: {price: string}): Promise<Result> {
   const user = await requireRole("admin");
   const price = Number(input.price);
-  const cohortSize = Number(input.cohortSize);
   if (!Number.isInteger(price) || price < 1 || price > 1_000_000) return {error: "Price must be a whole number above zero."};
-  if (!Number.isInteger(cohortSize) || cohortSize < 1 || cohortSize > 500) return {error: "Cohort size must be between 1 and 500."};
-  await store.updateSettings({price: String(price), cohortSize: String(cohortSize)});
-  await store.audit(user.id, "update_settings", `${store.currency} ${price} · cohort ${cohortSize}`);
+  await store.updateSettings({price: String(price)});
+  await store.audit(user.id, "update_settings", `${store.currency} ${price}`);
   revalidatePath("/", "layout");
-  return {ok: "Programme settings saved."};
+  return {ok: "Price saved."};
 }
 
 export async function addTrainer(input: {name: string; email: string; title: string; password: string}): Promise<Result> {

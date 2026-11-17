@@ -1,13 +1,9 @@
-import {notFound} from "next/navigation";
-import {requireRole} from "@/lib/dal";
-import {getClient} from "@/lib/store";
+import ClientShell from "../../../ClientShell";
 
 /*
- * Checks the member is assigned to this trainer before the loading screen (loading.tsx) starts streaming,
- * so anyone else's member is a real 404 rather than a 200 with a not-found page. The pages check again.
+ * Sidebar, member header and section tabs stay mounted across this member's pages. The member must be assigned to this
+ * trainer, checked before anything streams, so anyone else's member is a real 404. The pages check again.
  */
 export default async function TrainerMemberLayout({children, params}: {children: React.ReactNode; params: Promise<{id: string}>}) {
-  const [user, client] = await Promise.all([requireRole("trainer"), params.then(p => getClient(p.id))]);
-  if (!client || client.trainerId !== user.id) notFound();
-  return children;
+  return <ClientShell viewer="trainer" id={(await params).id}>{children}</ClientShell>;
 }
