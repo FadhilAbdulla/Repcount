@@ -4,9 +4,10 @@ import {useState} from "react";
 import {useRouter} from "next/navigation";
 import Modal from "./Modal";
 import {Icon} from "./Media";
-import {addAdmin, deleteClient, deleteTrainer, editAdmin, editMemberLog, editMembership, setAccountActive} from "./actions/data";
+import {addAdmin, changeMyPassword, deleteClient, saveEmailSettings, sendTestEmail, deleteTrainer, editAdmin, editMemberLog, editMembership, setAccountActive} from "./actions/data";
 import type {ClientRow, MemberLog} from "@/lib/store";
 import type {AdminAccount} from "@/lib/users";
+import type {EmailLogRow, MailStatus} from "@/lib/mail";
 import {moods} from "@/lib/memberState";
 
 type Result = {ok?: string; error?: string};
@@ -140,5 +141,70 @@ export function AdminAccounts({admins, selfEmail, pending, run}: {admins: AdminA
         <button className="button dark" type="submit" disabled={pending}>{pending ? "Saving…" : adding ? "Add admin" : "Save changes"} →</button>
       </form>
     </Modal>
+  </section>;
+}
+
+/** Settings → Change my password, for the signed-in admin. */
+export function ChangePassword({hasPassword, pending, run}: {hasPassword: boolean; pending: boolean; run: Run}) {
+  const empty = {current: "", next: "", confirm: ""};
+  const [form, setForm] = useState(empty);
+  const [error, setError] = useState("");
+  const mismatch = form.confirm !== "" && form.confirm !== form.next;
+  return <section className="card"><h2>Change my password</h2>
+    {!hasPassword && <p className="small-note">You sign in with Google. Set a password to also sign in with your email.</p>}
+    <form className="rc-modal-form" onSubmit={ev => {ev.preventDefault(); setError(""); run(async () => {
+      const result = await changeMyPassword(form);
+      if (result.ok) setForm(empty); else setError(result.error ?? "");
+      return result;
+    });}}>
+      {hasPassword && <label className="field">Current password<input type="password" value={form.current} onChange={ev => setForm({...form, current: ev.target.value})} required autoComplete="current-password"/></label>}
+      <div className="rc-modal-row">
+        <label className="field">New password<input type="password" value={form.next} onChange={ev => setForm({...form, next: ev.target.value})} required minLength={10} maxLength={200} autoComplete="new-password" placeholder="At least 10 characters"/></label>
+        <label className="field">Repeat new password<input type="password" value={form.confirm} onChange={ev => setForm({...form, confirm: ev.target.value})} required minLength={10} maxLength={200} autoComplete="new-password"/></label>
+      </div>
+      {mismatch && <p className="rc-modal-error" role="alert">The two new passwords don’t match.</p>}
+      {error && <p className="rc-modal-error" role="alert">{error}</p>}
+      <p className="small-note">Changing it signs you out on your other devices.</p>
+      <button className="button dark" type="submit" disabled={pending || mismatch}>{pending ? "Saving…" : "Change password"} →</button>
+    </form>
+  </section>;
+}
+
+const sentAt = (iso: string) => new Date(iso).toLocaleString("en-GB", {day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", timeZone: "Asia/Kolkata"});
+const statusLabel = {sent: "Sent", failed: "Failed", skipped: "Not sent"} as const;
+
+/** Settings → Email: the Resend API key and sender, a test email, and the last emails the app tried to send. */
+export function EmailSettings({status, recent, selfEmail, pending, run}: {status: MailStatus; recent: EmailLogRow[]; selfEmail: string; pending: boolean; run: Run}) {
+  const [form, setForm] = useState({apiKey: "", from: status.from});
+  const [error, setError] = useState("");
+  const save = (removeKey = false) => { setError(""); run(async () => {
+    const result = await saveEmailSettings({...form, removeKey});
+    if (result.ok) setForm(f => ({...f, apiKey: ""})); else setError(result.error ?? "");
+    return result;
+  }); };
+  const hasAdminKey = status.source === "admin" || status.keyUnreadable;
+  return <section className="card"><div className="section-top"><h2>Email</h2>
+    <span className={`pill${status.configured ? "" : " rc-pill-warn"}`}>{status.configured ? `CONNECTED${status.source === "env" ? " · FROM ENVIRONMENT" : ""}` : "NOT SET UP"}</span></div>
+    <p className="small-note">RepCount sends sign-up, payment, trainer, plan, check-in, message and password emails through <a href="https://resend.com" target="_blank" rel="noreferrer">Resend</a>. Create an API key under Resend → API Keys, and verify your domain under Domains so you can send from it.</p>
+    {status.keyUnreadable && <p className="rc-modal-error" role="alert">The saved API key can’t be read any more (the session secret changed). Enter it again.</p>}
+    <form className="rc-modal-form" onSubmit={ev => {ev.preventDefault(); save();}}>
+      <div className="rc-modal-row">
+        <label className="field">Resend API key<input type="password" value={form.apiKey} onChange={ev => setForm({...form, apiKey: ev.target.value})} autoComplete="off" spellCheck={false}
+          placeholder={status.keyHint ? `Saved (${status.keyHint}). Leave blank to keep it` : "re_…"} required={!status.configured}/></label>
+        <label className="field">Send from<input value={form.from} onChange={ev => setForm({...form, from: ev.target.value})} required maxLength={120} placeholder="RepCount <hello@yourdomain.com>" autoComplete="off"/></label>
+      </div>
+      <p className="small-note">The key is stored encrypted and never shown again. The sender must be on a domain verified in Resend.</p>
+      {error && <p className="rc-modal-error" role="alert">{error}</p>}
+      <div className="rc-schedule-tools">
+        <button className="button dark" type="submit" disabled={pending}>{pending ? "Saving…" : "Save email settings"}</button>
+        <button className="button outline" type="button" disabled={pending || !status.configured} onClick={() => run(() => sendTestEmail())}>Send test email to {selfEmail}</button>
+        {hasAdminKey && <button className="text-button rc-danger" type="button" disabled={pending} onClick={() => { if (window.confirm("Remove the saved API key? Email stops until you add one again.")) save(true); }}>Remove key</button>}
+      </div>
+    </form>
+    <h3 className="rc-email-log-title">Recent emails</h3>
+    {recent.length === 0 ? <p className="small-note">Nothing sent yet.</p> : <ul className="rc-admin-list rc-email-log">{recent.map(e => <li key={e.id}>
+      <div><b>{e.subject}</b><small>{e.to} · {sentAt(e.at)} IST{e.error ? ` · ${e.error}` : ""}</small></div>
+      <span className={`pill rc-email-${e.status}`}>{statusLabel[e.status]}</span>
+    </li>)}</ul>}
   </section>;
 }

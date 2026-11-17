@@ -298,3 +298,18 @@
 .rc-member .rc-plan-meals p{margin:4px 0 0}
 .rc-member .rc-trainer-nutrition .plan-note{white-space:pre-line}
 @media(max-width:700px){.rc-member .rc-today{flex-direction:column;align-items:stretch}.rc-member .rc-today h2{font-size:26px}.rc-member .rc-today-streak{flex-direction:row;justify-content:center;gap:10px;min-width:0}.rc-member .rc-today-streak strong{font-size:36px}.rc-member .rc-today-streak .text-button{margin:0 0 0 auto}.rc-member .rc-rank-hero .button{margin-left:0;width:100%}.rc-member .rc-plan-meals li{flex-direction:column;align-items:stretch}}
+/* Profile layout: one even rhythm between sections, equal-height plan/trainer cards */
+.rc-member .rc-profile-stack{display:flex;flex-direction:column;gap:22px}
+.rc-member .rc-profile-stack>*{margin:0}
+.rc-member .rc-profile-stack>.two-grid{align-items:stretch}
+.rc-member .rc-profile-stack>.two-grid>.card{display:flex;flex-direction:column;align-items:flex-start;margin:0}
+.rc-member .rc-profile-stack .price-card .profile-details{width:100%}
+.rc-member .rc-plan-action{margin-top:auto;padding-top:8px}
+.rc-member .rc-plan-action .button{margin-top:0}
+.rc-member .rc-plan-action .small-note{margin:12px 0 0;font-size:13px;line-height:1.55}
+.rc-member .rc-profile-stack .team-card .large-avatar{margin-bottom:18px}
+.rc-member .rc-profile-stack .team-card .eyebrow{margin-bottom:0}
+.rc-member .rc-profile-stack .team-card h2{margin:6px 0 10px}
+.rc-member .rc-profile-stack .team-card>p{margin:0 0 10px}
+.rc-member .rc-team-actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:auto;padding-top:18px}
+.rc-member .rc-team-actions>.button{margin:0}

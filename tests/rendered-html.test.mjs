@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test, { before, after } from 'node:test';
 import { spawn } from 'node:child_process';
 import { createServer } from 'node:net';
+import { createServer as createHttpServer } from 'node:http';
 import { SignJWT } from 'jose';
 import postgres from 'postgres';
 import { readFileSync } from 'node:fs';
@@ -15,17 +16,29 @@ let baseUrl;
 const DATABASE_URL = process.env.TEST_DATABASE_URL;
 if (!DATABASE_URL || !/test/i.test(new URL(DATABASE_URL).pathname)) throw new Error('Set TEST_DATABASE_URL to a throwaway Postgres database whose name contains "test".');
 const sql = postgres(DATABASE_URL, {max: 2, onnotice: () => {}});
+// A stand-in for Resend's API: records each email; the key re_rejected_key1 gets Resend's "domain not verified" refusal.
+const mailbox = [];
+const fakeResend = createHttpServer((req, res) => {
+ let body = '';
+ req.on('data', c => body += c);
+ req.on('end', () => {
+  if (req.headers.authorization === 'Bearer re_rejected_key1') { res.writeHead(403, {'content-type': 'application/json'}); res.end(JSON.stringify({message: 'The example.com domain is not verified.'})); return; }
+  mailbox.push({auth: req.headers.authorization, ...JSON.parse(body)});
+  res.writeHead(200, {'content-type': 'application/json'}); res.end(JSON.stringify({id: `email-${mailbox.length}`}));
+ });
+});
 before(async () => {
+ await new Promise(resolve => fakeResend.listen(0, '127.0.0.1', resolve));
  await sql.unsafe('drop schema public cascade; create schema public;');
  const port = await new Promise(resolve => { const s = createServer(); s.listen(0, () => { const p = s.address().port; s.close(() => resolve(p)); }); });
  baseUrl = `http://127.0.0.1:${port}`;
- server = spawn(process.execPath, ['node_modules/next/dist/bin/next', 'start', '-p', String(port), '-H', '127.0.0.1'], {env: {...process.env, SESSION_SECRET, DATABASE_URL, SEED_DEMO_DATA: 'true', SHOW_DEMO_ACCOUNTS: 'false', GOOGLE_CLIENT_ID: 'test-client.apps.googleusercontent.com', GOOGLE_CLIENT_SECRET: 'test-secret'}, stdio: 'ignore'});
+ server = spawn(process.execPath, ['node_modules/next/dist/bin/next', 'start', '-p', String(port), '-H', '127.0.0.1'], {env: {...process.env, SESSION_SECRET, DATABASE_URL, SEED_DEMO_DATA: 'true', SHOW_DEMO_ACCOUNTS: 'false', GOOGLE_CLIENT_ID: 'test-client.apps.googleusercontent.com', GOOGLE_CLIENT_SECRET: 'test-secret', ADMIN_EMAIL: 'Owner@Example.com', ADMIN_PASSWORD: 'short', RESEND_API_KEY: '', MAIL_FROM: '', RESEND_API_URL: `http://127.0.0.1:${fakeResend.address().port}/emails`}, stdio: 'ignore'});
  for (let i = 0; i < 100; i++) {
   try { await fetch(baseUrl + '/'); return; } catch { await new Promise(r => setTimeout(r, 100)); }
  }
  throw new Error('next start did not respond');
 });
-after(async () => { server?.kill(); await sql.end(); });
+after(async () => { server?.kill(); fakeResend.close(); await sql.end(); });
 
 let rendered;
 function productionHomepage() {
@@ -652,4 +665,147 @@ test('admins manage admin accounts, but never deactivate themselves', async () =
  // Trainers can't add admins.
  assert.equal((await callAction('app/actions/data.ts', 'addAdmin', [{name: 'Sneaky', email: 'sneaky@example.com', password: 'Sneaky#20266'}], await sessionCookie('u-trainer-akif', 'trainer'), '/admin')).ok, undefined);
  assert.equal((await sql`select count(*)::int as n from users where email = 'sneaky@example.com'`)[0].n, 0);
+});
+
+test('ADMIN_EMAIL creates the first admin once; a too-short ADMIN_PASSWORD is ignored', async () => {
+ const owners = await sql`select role, password_hash, name from users where email = 'owner@example.com'`;
+ assert.equal(owners.length, 1);
+ assert.equal(owners[0].role, 'admin');
+ assert.equal(owners[0].password_hash, null);
+ // Only Google sign-in works for it until a password is set in Settings.
+ const login = await submitForm('/login', {email: 'owner@example.com', password: 'short'}, '10.7.7.1');
+ assert.doesNotMatch(login.headers.get('location') ?? '', /\/admin$/);
+});
+
+test('an admin changes their own password in Settings', async () => {
+ const id = (await sql`select id from users where email = 'owner@example.com'`)[0].id;
+ const owner = await currentCookie(id, 'admin');
+ assert.match(readableText(await (await visit('/admin?tab=settings', owner)).text()), /Change my password.*You sign in with Google/);
+ // A Google-only admin sets a first password without a current one.
+ const first = await callAction('app/actions/data.ts', 'changeMyPassword', [{current: '', next: 'OwnerPass#2026', confirm: 'OwnerPass#2026'}], owner, '/admin');
+ assert.match(first.ok ?? JSON.stringify(first), /Password changed/);
+ assert.match((await submitForm('/login', {email: 'owner@example.com', password: 'OwnerPass#2026'}, '10.7.7.2')).headers.get('location') ?? '', /\/admin$/);
+ // The old session is signed out; from now on the current password is required.
+ assert.match((await visit('/admin', owner)).headers.get('location') ?? '', /\/login$/);
+ const fresh = await currentCookie(id, 'admin');
+ assert.match((await callAction('app/actions/data.ts', 'changeMyPassword', [{current: '', next: 'Another#20266', confirm: 'Another#20266'}], fresh, '/admin')).error ?? '', /current password is wrong/);
+ assert.match((await callAction('app/actions/data.ts', 'changeMyPassword', [{current: 'OwnerPass#2026', next: 'Root@123', confirm: 'Root@123'}], fresh, '/admin')).error ?? '', /at least 10/);
+ assert.match((await callAction('app/actions/data.ts', 'changeMyPassword', [{current: 'OwnerPass#2026', next: 'Another#20266', confirm: 'Another#2027'}], fresh, '/admin')).error ?? '', /don’t match/);
+ const changed = await callAction('app/actions/data.ts', 'changeMyPassword', [{current: 'OwnerPass#2026', next: 'Another#20266', confirm: 'Another#20266'}], fresh, '/admin');
+ assert.match(changed.ok ?? JSON.stringify(changed), /Password changed/);
+ assert.match((await submitForm('/login', {email: 'owner@example.com', password: 'Another#20266'}, '10.7.7.3')).headers.get('location') ?? '', /\/admin$/);
+ // Five wrong current passwords lock the form for 15 minutes.
+ const now = await currentCookie(id, 'admin');
+ for (let i = 0; i < 5; i++) await callAction('app/actions/data.ts', 'changeMyPassword', [{current: 'wrong-guess', next: 'Guess#202600', confirm: 'Guess#202600'}], now, '/admin');
+ assert.match((await callAction('app/actions/data.ts', 'changeMyPassword', [{current: 'Another#20266', next: 'Guess#202600', confirm: 'Guess#202600'}], now, '/admin')).error ?? '', /Too many/);
+ // Trainers can't use it.
+ assert.equal((await callAction('app/actions/data.ts', 'changeMyPassword', [{current: '', next: 'Trainer#20266', confirm: 'Trainer#20266'}], await sessionCookie('u-trainer-akif', 'trainer'), '/admin')).ok, undefined);
+});
+
+/** Notifications go out just after the response, so wait for them to land. */
+async function waitFor(check, what) {
+ for (let i = 0; i < 50; i++) { const found = await check(); if (found) return found; await new Promise(r => setTimeout(r, 100)); }
+ assert.fail(`Timed out waiting for ${what}`);
+}
+
+test('without email set up, notifications are logged as not sent', async () => {
+ const rows = await sql`select kind, status from email_log`;
+ for (const kind of ['welcome', 'admin_new_member', 'member_question', 'staff_reply', 'invite']) {
+  assert.ok(rows.some(r => r.kind === kind && r.status === 'skipped'), `${kind} logged as skipped`);
+ }
+ assert.equal(mailbox.length, 0, 'Nothing reached the provider');
+});
+
+test('the admin sets up email in Settings; the API key is stored encrypted', async () => {
+ const admin = await sessionCookie('u-admin', 'admin');
+ const save = input => callAction('app/actions/data.ts', 'saveEmailSettings', [input], admin, '/admin');
+ assert.match((await save({apiKey: 'sk_live_123', from: 'hello@example.com'})).error ?? '', /starts with re_/);
+ assert.match((await save({apiKey: 're_test_key_123456', from: 'not an address'})).error ?? '', /Enter the sender/);
+ assert.equal((await callAction('app/actions/data.ts', 'saveEmailSettings', [{apiKey: 're_trainer_key_99', from: 'x@example.com'}], await sessionCookie('u-trainer-akif', 'trainer'), '/admin')).ok, undefined);
+ assert.equal((await sql`select count(*)::int as n from settings where key = 'mail_api_key'`)[0].n, 0, 'Trainers cannot set it');
+ assert.match((await callAction('app/actions/data.ts', 'sendTestEmail', [], admin, '/admin')).error ?? '', /API key and sender first/);
+ const saved = await save({apiKey: 're_test_key_123456', from: 'RepCount <hello@example.com>'});
+ assert.match(saved.ok ?? JSON.stringify(saved), /Email settings saved/);
+ const [stored] = await sql`select value from settings where key = 'mail_api_key'`;
+ assert.doesNotMatch(stored.value, /re_test_key/, 'The key is not stored in plain text');
+ const settings = readableText(await (await visit('/admin?tab=settings', admin)).text());
+ assert.match(settings, /CONNECTED/);
+ assert.match(await (await visit('/admin?tab=settings', admin)).text(), /Saved \(…3456\)/, 'Only the last four characters are shown');
+ assert.doesNotMatch(await (await visit('/admin?tab=settings', admin)).text(), /re_test_key_123456/, 'The key never reaches the page');
+ // Saving again with a blank key keeps it.
+ assert.ok((await save({apiKey: '', from: 'RepCount <team@example.com>'})).ok);
+ assert.equal((await sql`select count(*)::int as n from settings where key = 'mail_api_key'`)[0].n, 1);
+
+ const test = await callAction('app/actions/data.ts', 'sendTestEmail', [], admin, '/admin');
+ assert.match(test.ok ?? JSON.stringify(test), /Test email sent to admin@repcount.demo/);
+ const sent = mailbox.at(-1);
+ assert.equal(sent.auth, 'Bearer re_test_key_123456');
+ assert.equal(sent.from, 'RepCount <team@example.com>');
+ assert.deepEqual(sent.to, ['admin@repcount.demo']);
+ assert.match(sent.html, /REP<span[^>]*>COUNT/);
+ assert.match(sent.text, /email is working/);
+ assert.match(readableText(await (await visit('/admin?tab=settings', admin)).text()), /RepCount test email.*Sent/);
+});
+
+test('members, trainers and admins get emails for the events that matter to them', async () => {
+ const admin = await sessionCookie('u-admin', 'admin');
+ const akif = await currentCookie('u-trainer-akif', 'trainer');
+ const aarav = await currentCookie('u-member-aarav', 'member');
+ const inbox = (to, subject) => waitFor(() => mailbox.find(m => m.to[0] === to && subject.test(m.subject)), `${subject} to ${to}`);
+
+ await callAction('app/actions/data.ts', 'askCoach', ['Is it fine to train with sore legs?'], aarav, '/member/profile');
+ const question = await inbox('trainer@repcount.demo', /asked a question/);
+ assert.match(question.text, /sore legs/);
+ assert.match(question.html, /\/trainer\/clients\/c-aarav/);
+
+ await callAction('app/actions/data.ts', 'replyToMember', ['c-aarav', 'Yes, go lighter today.'], akif, '/trainer/clients/c-aarav');
+ assert.match((await inbox('member@repcount.demo', /replied on RepCount/)).text, /go lighter today/);
+
+ // Maya was verified earlier; mark her unpaid again, then verify.
+ await callAction('app/actions/data.ts', 'editMembership', ['c-maya', {paid: false, reference: 'UPI-48213', joinedOn: '', nextCheckIn: ''}], admin, '/admin/clients/c-maya');
+ await callAction('app/actions/data.ts', 'verifyPayment', ['c-maya'], admin, '/admin');
+ assert.match((await inbox('maya@example.com', /payment is verified/)).text, /membership is active/);
+
+ const week = new Date(Date.parse(`${istWeekStart()}T00:00:00Z`) + 21 * 86400000).toISOString().slice(0, 10);
+ const plan = [{title: 'Full-body foundations', exercises: ['Squats'], time: '18:00', durationMin: 25, meetingUrl: null}, null, null, null, null, null, null];
+ const before = mailbox.length;
+ await callAction('app/actions/data.ts', 'saveSchedule', ['c-aarav', week, plan], akif, `/trainer/clients/c-aarav/workouts/${week}/monday`);
+ assert.match((await inbox('member@repcount.demo', /plan for the week of/)).text, /planned 1 workout/);
+ await callAction('app/actions/data.ts', 'saveSchedule', ['c-aarav', week, plan.map((d, i) => i === 2 ? plan[0] : d)], akif, `/trainer/clients/c-aarav/workouts/${week}/monday`);
+ await new Promise(r => setTimeout(r, 500));
+ assert.equal(mailbox.slice(before).filter(m => /plan for the week of/.test(m.subject)).length, 1, 'Later edits to the week send no more emails');
+
+ await callAction('app/actions/data.ts', 'reviewCheckin', ['c-aarav'], akif, '/trainer/clients/c-aarav');
+ await inbox('member@repcount.demo', /reviewed your check-in/);
+
+ // A new sign-up gets a welcome email, and every active admin hears about it.
+ const signup = await submitForm('/register', {name: 'Zara Khan', email: 'zara@example.com', phone: '', password: 'ZaraPass#2026', adult: 'on', privacy: 'on'}, '10.6.6.1');
+ assert.match(signup.headers.get('location') ?? '', /\/onboarding$/);
+ assert.match((await inbox('zara@example.com', /Welcome to RepCount/)).html, /Open RepCount/);
+ await inbox('admin@repcount.demo', /New member: Zara Khan/);
+ const logged = await sql`select status from email_log where to_email = 'zara@example.com'`;
+ assert.deepEqual(logged.map(r => r.status), ['sent']);
+});
+
+test('a refused email is logged with the provider’s reason; resets are emailed with a working link', async () => {
+ const admin = await sessionCookie('u-admin', 'admin');
+ await callAction('app/actions/data.ts', 'saveEmailSettings', [{apiKey: 're_rejected_key1', from: 'RepCount <team@example.com>'}], admin, '/admin');
+ assert.match((await callAction('app/actions/data.ts', 'sendTestEmail', [], admin, '/admin')).error ?? '', /refused/);
+ const [failed] = await sql`select status, error from email_log where kind = 'test' order by id desc limit 1`;
+ assert.deepEqual(failed, {status: 'failed', error: '403: The example.com domain is not verified.'});
+ assert.match(readableText(await (await visit('/admin?tab=settings', admin)).text()), /domain is not verified.*Failed/);
+
+ await callAction('app/actions/data.ts', 'saveEmailSettings', [{apiKey: 're_test_key_123456', from: 'RepCount <team@example.com>'}], admin, '/admin');
+ await submitForm('/forgot-password', {email: 'owner@example.com'}, '10.6.6.2');
+ const reset = await waitFor(() => mailbox.find(m => m.to[0] === 'owner@example.com' && /Reset your RepCount password/.test(m.subject)), 'reset email');
+ const token = tokenFrom(reset.text);
+ assert.ok(token, 'The email carries the reset link');
+ assert.equal((await visit(`/reset-password?token=${token}`)).status, 200);
+ // Using it sends a security notice.
+ const done = await submitForm(`/reset-password?token=${token}`, {password: 'Owner#New2026', confirm: 'Owner#New2026', privacy: 'on'}, '10.6.6.3');
+ assert.match(done.headers.get('location') ?? '', /password_set/);
+ await waitFor(() => mailbox.find(m => m.to[0] === 'owner@example.com' && /password was changed/.test(m.subject)), 'password changed notice');
+ // Removing the key stops email again.
+ await callAction('app/actions/data.ts', 'saveEmailSettings', [{apiKey: '', from: 'RepCount <team@example.com>', removeKey: true}], admin, '/admin');
+ assert.match(readableText(await (await visit('/admin?tab=settings', admin)).text()), /NOT SET UP/);
 });

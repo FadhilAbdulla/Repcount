@@ -35,6 +35,10 @@ const eslintConfig = defineConfig([
         version: "detect",
       },
     },
+    rules: {
+      // PasswordInput renders a real <input>, so a wrapping <label> is associated with it.
+      "jsx-a11y/label-has-associated-control": ["error", { controlComponents: ["PasswordInput"], depth: 3 }],
+    },
   },
 ]);
 

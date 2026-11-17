@@ -6,7 +6,9 @@ import {redirect} from "next/navigation";
 import {requireRole, startSession} from "@/lib/dal";
 import {goals, places, rhythms} from "@/lib/programme";
 import * as store from "@/lib/store";
-import {createUser, emailTaken, findUser, initialsOf, loginLimited, recordLoginFailure} from "@/lib/users";
+import {sendLater} from "@/lib/mail";
+import {emails} from "@/lib/emails";
+import {createUser, emailTaken, findUser, listAdmins, initialsOf, loginLimited, recordLoginFailure} from "@/lib/users";
 
 export type RegisterState = {error?: string; values?: Record<string, string>} | undefined;
 export type OnboardingState = {error?: string} | undefined;
@@ -42,6 +44,8 @@ export async function register(_state: RegisterState, formData: FormData): Promi
     phone: values.phone || null, goal: "", trainerId: null,
   });
   await store.audit(userId, "self_register", `${values.name} · ${values.email}`, clientId);
+  const member = {id: clientId, name: values.name, email: values.email};
+  sendLater(emails.welcome(member), ...(await listAdmins()).filter(a => a.active).map(a => emails.newRegistration(a, member)));
   const user = await findUser(userId);
   if (user) await startSession(user);
   redirect("/onboarding");

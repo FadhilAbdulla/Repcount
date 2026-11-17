@@ -276,7 +276,10 @@ const isoDate = /^\d{4}-\d{2}-\d{2}$/;
  * Saves the member's app state. `revision` is the one their app loaded: if the admin has corrected the log since,
  * the save is refused ({stale: true}) so the app reloads instead of writing over the correction.
  */
-export async function saveMemberState(userId: string, input: unknown, revision?: number): Promise<{stale: boolean}> {
+/** `checkinNote` / `paymentReference` are set when this save newly submitted a check-in or a payment reference (used for notifications). */
+export type MemberSave = {stale: boolean; checkinNote?: string; paymentReference?: string};
+
+export async function saveMemberState(userId: string, input: unknown, revision?: number): Promise<MemberSave> {
   const sql = await db();
   const {day, weekStart} = istToday();
   const sanitized = sanitizeMemberState(input, day, weekStart);
@@ -300,6 +303,7 @@ export async function saveMemberState(userId: string, input: unknown, revision?:
 
     const [client] = await tx<{id: string}[]>`select id from clients where user_id = ${userId}`;
     if (!client) return {stale: false};
+    const result: MemberSave = {stale: false};
     // Progress is completed ÷ planned workouts in the trainer's schedule; without a schedule there is nothing to measure.
     const {progress, trainedToday} = await weekProgress(tx, client.id, state.workout.completedDays, day, weekStart);
     await tx`update clients set progress = ${progress}, next_checkin = ${state.booking ?? "Not booked"},
@@ -307,12 +311,16 @@ export async function saveMemberState(userId: string, input: unknown, revision?:
     const sameWeek = before?.weekStart === weekStart;
     const checkinChanged = state.checkin.submitted && (!sameWeek || !before?.checkin.submitted || before.checkin.energy !== state.checkin.energy || before.checkin.planFit !== state.checkin.planFit);
     if (checkinChanged) {
-      await tx`update clients set stage = 'Check-in due', checkin_note = ${`Energy ${state.checkin.energy.toLowerCase()} · ${state.checkin.planFit.toLowerCase()}`} where id = ${client.id}`;
+      const note = `Energy ${state.checkin.energy.toLowerCase()} · ${state.checkin.planFit.toLowerCase()}`;
+      await tx`update clients set stage = 'Check-in due', checkin_note = ${note} where id = ${client.id}`;
+      // Edits to an already-sent check-in update the note but don't email again.
+      if (!sameWeek || !before?.checkin.submitted) result.checkinNote = note;
     }
     if (state.payment.submitted && (!before?.payment.submitted || before.payment.reference !== state.payment.reference)) {
       await tx`update clients set payment_reference = ${state.payment.reference} where id = ${client.id}`;
+      result.paymentReference = state.payment.reference;
     }
-    return {stale: false};
+    return result;
   });
 }
 
@@ -384,8 +392,11 @@ export async function updateMembership(clientId: string, input: {paid: boolean; 
 export async function deleteClient(clientId: string) {
   const sql = await db();
   return sql.begin(async tx => {
-    const [row] = await tx<{user_id: string | null; name: string}[]>`delete from clients where id = ${clientId} returning user_id, name`;
+    const [row] = await tx<{user_id: string | null; name: string; email: string | null}[]>`delete from clients where id = ${clientId} returning user_id, name, email`;
     if (!row) return null;
+    const [login] = row.user_id ? await tx<{email: string}[]>`select email from users where id = ${row.user_id}` : [];
+    const addresses = [row.email, login?.email].filter((e): e is string => !!e);
+    if (addresses.length) await tx`delete from email_log where to_email in ${tx(addresses)}`;
     if (row.user_id) await tx`delete from users where id = ${row.user_id} and role = 'member'`;
     await tx`update audit_log set detail = 'Deleted client' where subject_id = ${clientId} or subject_id = ${row.user_id ?? clientId}`;
     return row.name;

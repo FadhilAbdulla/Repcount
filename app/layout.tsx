@@ -1,5 +1,7 @@
 import type { Metadata, Viewport } from "next";
+import {Suspense} from "react";
 import "./globals.css";
+import NavProgress from "./NavProgress";
 
 export const metadata: Metadata = {
   metadataBase: new URL(process.env.SITE_URL ?? "http://localhost:3000"),
@@ -22,5 +24,5 @@ export const metadata: Metadata = {
 export const viewport: Viewport = { themeColor: "#faf7f1", viewportFit: "cover" };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  return <html lang="en"><body>{children}</body></html>;
+  return <html lang="en"><body><Suspense fallback={null}><NavProgress/></Suspense>{children}</body></html>;
 }

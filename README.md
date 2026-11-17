@@ -48,7 +48,7 @@ Optional. Set `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` to show "Continue wi
 - The first super admin comes from `ADMIN_EMAIL` (and optional `ADMIN_PASSWORD`). Demo accounts are only created with `SEED_DEMO_DATA=true`, and listed on the login page outside production builds or when `SHOW_DEMO_ACCOUNTS=true`.
 - Password reset: "Forgot?" on `/login` opens `/forgot-password`, which emails a one-hour, single-use link to `/reset-password` (the same reply whether or not the email exists; 3 requests per email and 10 per IP in 15 minutes). Setting a new password signs the person out everywhere. Only a SHA-256 hash of each link is stored (`password_tokens`).
 - The admin can **Send reset link** for any member (client page) or trainer (Trainers tab). Adding a member or trainer without a password sends a 7-day invitation link to choose one.
-- Email goes through Resend when `RESEND_API_KEY` and `MAIL_FROM` are set. Without them, the admin sees the link in the confirmation message to pass on by hand.
+- **Email** (`lib/mail.ts`, templates in `lib/emails.ts`) goes through Resend. The admin pastes the API key and sender in Admin → Settings → Email (key stored AES-256-GCM encrypted, keyed from `SESSION_SECRET`; `RESEND_API_KEY`/`MAIL_FROM` are a fallback), can send a test email, and sees the last 20 emails with their status and any provider error (`email_log`, kept 180 days). Emails sent: welcome and new-member alert to admins on sign-up, payment reference submitted (admins), payment verified, trainer assigned (member and trainer), member question (trainer, or admins while unassigned), staff reply, week plan published (once per week), check-in call link, check-in submitted (trainer) and reviewed (member), password reset, invitation, and password-changed notices. Notifications are sent after the response (`after()`), so a slow or failing email never blocks an action. Without email set up, the admin sees reset/invitation links to pass on by hand.
 
 ## Development
 
@@ -80,4 +80,4 @@ Reduced-motion and Save Data preferences keep video posters visible without auto
 
 The programme describes an India adults-only pilot, priced in AED (default AED 299 for 30 days, editable by the super admin) with a personal training plan and weekly trainer follow-ups. Nutrition scope remains open. The psychologist onboarding service has been withdrawn and is not offered.
 
-Before real client use: set up Resend (or another email provider) on a verified domain, have the privacy policy reviewed, enable Neon point-in-time restore and schedule `npm run backup`. Brand availability has not been checked.
+Before real client use: set up Resend on a verified domain (Admin → Settings → Email), have the privacy policy reviewed, enable Neon point-in-time restore and schedule `npm run backup`. Brand availability has not been checked.

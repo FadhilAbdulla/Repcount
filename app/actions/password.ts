@@ -2,7 +2,9 @@
 
 import {headers} from "next/headers";
 import {redirect} from "next/navigation";
-import {findUserByEmail, loginLimited, recordLoginFailure} from "@/lib/users";
+import {findUser, findUserByEmail, loginLimited, recordLoginFailure} from "@/lib/users";
+import {sendLater} from "@/lib/mail";
+import {emails} from "@/lib/emails";
 import {sendPasswordLink, redeemPasswordToken} from "@/lib/passwordTokens";
 
 export type ForgotState = {sent?: boolean; error?: string; email?: string} | undefined;
@@ -32,7 +34,10 @@ export async function resetPassword(_state: ResetState, formData: FormData): Pro
   if (password.length < 10 || password.length > 200) return {error: "Choose a password of at least 10 characters."};
   if (password !== confirm) return {error: "The two passwords don’t match."};
   if (formData.get("privacy") !== "on") return {error: "Please accept the privacy policy to continue."};
-  const userId = await redeemPasswordToken(token, password);
-  if (!userId) return {error: "This link has expired or has already been used. Ask for a new one."};
+  const redeemed = await redeemPasswordToken(token, password);
+  if (!redeemed) return {error: "This link has expired or has already been used. Ask for a new one."};
+  // A reset (not a first password from an invitation) gets a security notice, in case it wasn't them.
+  const user = redeemed.purpose === "reset" ? await findUser(redeemed.userId) : null;
+  if (user) sendLater(emails.passwordChanged(user));
   redirect("/login?notice=password_set");
 }

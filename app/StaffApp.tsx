@@ -12,7 +12,8 @@ import {addClient, addTrainer, assignTrainer, editTrainer, reviewCheckin, saveSe
 import type {AuditEntry, ClientRow, Settings, TrainerStats} from "@/lib/store";
 import {memberCode} from "@/lib/programme";
 import Modal from "./Modal";
-import {AdminAccounts, DeleteAccount} from "./AdminEditors";
+import {AdminAccounts, ChangePassword, DeleteAccount, EmailSettings} from "./AdminEditors";
+import type {EmailLogRow, MailStatus} from "@/lib/mail";
 import type {AdminAccount} from "@/lib/users";
 import "./member-polish.css";
 import "./accessibility-polish.css";
@@ -33,10 +34,10 @@ const headings: Record<string, [string, string]> = {
   checkins: ["Weekly check-ins.", "Review how each client’s week went and adjust their plan."],
   overview: ["The whole gym, at a glance.", "Cohort health, payments and trainer coverage."],
   trainers: ["Your coaching team.", "How each trainer’s members are doing this week."],
-  settings: ["Programme settings.", "Pricing and cohort rules for the pilot."],
+  settings: ["Programme settings.", "Pricing, email, your password and admin accounts."],
 };
 
-export const activityLabels: Record<string, string> = {assign_trainer: "Trainer assigned", verify_payment: "Payment verified", review_checkin: "Check-in reviewed", update_settings: "Settings updated", add_trainer: "Trainer added", edit_trainer: "Trainer edited", edit_client: "Client details edited", schedule_week: "Week scheduled", confirm_session: "Session completed", unconfirm_session: "Session completion removed", save_nutrition: "Nutrition plan saved", set_meeting_link: "Call link updated", add_client: "Client added", set_stage: "Stage changed", deactivate_user: "Account deactivated", reactivate_user: "Account reactivated", self_register: "Registered online", ask_coach: "Question sent", reply_member: "Reply sent", send_reset_link: "Reset link sent", edit_membership: "Membership edited", edit_member_log: "Member log corrected", delete_client: "Client deleted", delete_trainer: "Trainer deleted", delete_message: "Message removed", add_admin: "Admin added", edit_admin: "Admin edited", complete_onboarding: "Onboarding answered"};
+export const activityLabels: Record<string, string> = {assign_trainer: "Trainer assigned", verify_payment: "Payment verified", review_checkin: "Check-in reviewed", update_settings: "Settings updated", add_trainer: "Trainer added", edit_trainer: "Trainer edited", edit_client: "Client details edited", schedule_week: "Week scheduled", confirm_session: "Session completed", unconfirm_session: "Session completion removed", save_nutrition: "Nutrition plan saved", set_meeting_link: "Call link updated", add_client: "Client added", set_stage: "Stage changed", deactivate_user: "Account deactivated", reactivate_user: "Account reactivated", self_register: "Registered online", ask_coach: "Question sent", reply_member: "Reply sent", send_reset_link: "Reset link sent", edit_membership: "Membership edited", edit_member_log: "Member log corrected", delete_client: "Client deleted", delete_trainer: "Trainer deleted", delete_message: "Message removed", add_admin: "Admin added", edit_admin: "Admin edited", change_password: "Password changed", edit_email_settings: "Email settings changed", complete_onboarding: "Onboarding answered"};
 const stageOrder = ["Payment review", "Onboarding", "Check-in due", "Active"];
 const sorters: Record<string, (a: ClientRow, b: ClientRow) => number> = {
   Name: (a, b) => a.name.localeCompare(b.name),
@@ -50,10 +51,10 @@ const emptyClient = {name: "", email: "", phone: "", goal: "", trainerId: "", pa
 
 type Props = {
   area: StaffRole; user: StaffUser; clients: ClientRow[]; settings: Settings; activity: AuditEntry[];
-  trainers?: TrainerStats[]; initialTab?: string; detail?: ReactNode; admins?: AdminAccount[];
+  trainers?: TrainerStats[]; initialTab?: string; detail?: ReactNode; admins?: AdminAccount[]; mail?: {status: MailStatus; recent: EmailLogRow[]};
 };
 
-export default function StaffApp({area: role, user, clients, settings, activity, trainers = [], initialTab, detail, admins = []}: Props) {
+export default function StaffApp({area: role, user, clients, settings, activity, trainers = [], initialTab, detail, admins = [], mail}: Props) {
   const router = useRouter();
   const [tab, setTab] = useState(initialTab && tabs[role].some(([key]) => key === initialTab) ? initialTab : tabs[role][0][0]);
   const [filter, setFilter] = useState("All clients");
@@ -258,6 +259,8 @@ export default function StaffApp({area: role, user, clients, settings, activity,
             <button className="button dark" type="submit" disabled={pending}>{pending ? "Saving…" : "Save settings"}</button>
           </form>
           <p className="small-note">Members see the new price on their profile page straight away.</p></section>}
+        {tab === "settings" && role === "admin" && mail && <EmailSettings status={mail.status} recent={mail.recent} selfEmail={user.email} pending={pending} run={run}/>}
+        {tab === "settings" && role === "admin" && <ChangePassword hasPassword={admins.find(a => a.email === user.email)?.canUsePassword ?? true} pending={pending} run={run}/>}
         {tab === "settings" && role === "admin" && <AdminAccounts admins={admins} selfEmail={user.email} pending={pending} run={run}/>}
         </>}
         <footer><span><Brand variant="phone"/></span><span>{role === "admin" ? "Super admin" : "Trainer"} · signed in as {user.email}</span></footer>

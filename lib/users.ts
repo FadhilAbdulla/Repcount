@@ -55,6 +55,19 @@ export async function updateStaffUser(id: string, role: "trainer" | "admin", inp
 
 export const updateTrainer = (id: string, input: {name: string; email: string; title: string; password: string | null}) => updateStaffUser(id, "trainer", input);
 
+/**
+ * Signed-in user changing their own password. The current password is required when the account has one
+ * (a Google-only account sets its first password without it). Signs the person out on every other device.
+ */
+export async function changeOwnPassword(id: string, current: string, next: string): Promise<User | "wrong" | null> {
+  const sql = await db();
+  const [row] = await sql<Row[]>`select * from users where id = ${id} and active`;
+  if (!row) return null;
+  if (row.password_hash && !passwordMatches(current, row.password_hash)) return "wrong";
+  const [updated] = await sql<Row[]>`update users set password_hash = ${hashPassword(next)}, session_version = session_version + 1 where id = ${id} returning *`;
+  return publicUser(updated);
+}
+
 export type AdminAccount = {id: string; name: string; email: string; active: boolean; canUsePassword: boolean};
 
 export async function listAdmins(): Promise<AdminAccount[]> {

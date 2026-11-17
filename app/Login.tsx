@@ -4,9 +4,13 @@ import Photo from './Photo';
 import {useActionState,useEffect,useRef} from 'react';
 import Link from 'next/link';
 import Brand from './Brand';
-import {Icon,media} from './Media';
+import {Icon} from './Media';
+import PasswordInput from './PasswordInput';
 import {login,type LoginState} from './actions/auth';
 import './login.css';
+
+// High-res portrait (2000×3000) so the tall story panel stays sharp on retina screens.
+const loginPhoto='https://images.pexels.com/photos/4164761/pexels-photo-4164761.jpeg?auto=compress&cs=tinysrgb&w=2000';
 
 const testAccounts=[
   ['Admin','admin@repcount.demo','Admin#2026'],
@@ -26,7 +30,7 @@ export function AuthShell({active,children}:{active?:'login'|'register';children
   return <div className="rc-login">
     <a className="skip" href="#auth-heading">Skip to form</a>
     <aside className="rc-login-story" aria-label="Personal coaching at home">
-      <Photo src={media.home.poster} alt="Woman exercising in her living room" priority sizes="(max-width: 860px) 1px, 52vw"/>
+      <Photo src={loginPhoto} alt="Athlete training with dumbbells in a gym" priority sizes="(max-width: 860px) 1px, 52vw"/>
       <div className="rc-login-story-shade"/>
       <Link className="rc-login-story-brand" href="/" aria-label="RepCount home"><Brand tone="light"/></Link>
       <div className="rc-login-story-copy">
@@ -70,7 +74,7 @@ export default function Login({showDemoAccounts,googleEnabled,notice,success}:{s
       {error?<div className="rc-login-error" role="alert">{error}</div>:success&&<div className="rc-login-success" role="status">{success}</div>}
       <label><span>Email</span><input name="email" type="email" placeholder="you@example.com" autoComplete="username" required defaultValue={state?.email} aria-invalid={!!state?.error}/></label>
       <label><span className="rc-login-label-row">Password<Link href="/forgot-password">Forgot?</Link></span>
-        <input name="password" type="password" placeholder="Your password" autoComplete="current-password" required aria-invalid={!!state?.error}/></label>
+        <PasswordInput name="password" placeholder="Your password" autoComplete="current-password" required aria-invalid={!!state?.error}/></label>
       <button type="submit" className="rc-login-submit" disabled={pending}>{pending?'Signing in…':'Sign in'} <Icon name="arrow" size={18}/></button>
       {googleEnabled&&<a className="rc-login-google" href="/api/auth/google">{googleMark}Continue with Google</a>}
     </form>

@@ -6,7 +6,7 @@ RepCount stores everything in Postgres. Production uses Neon; any Postgres 15+ w
 
 1. In the Neon console, open the project and copy the **pooled** connection string (the host contains `-pooler`).
 2. Set it as `DATABASE_URL` in Vercel (Production and Preview) and in `.env.local`. Keep it out of chat, GitHub and any `NEXT_PUBLIC_` variable.
-3. Set `ADMIN_EMAIL` to the owner's Google account (and optionally `ADMIN_PASSWORD`, 10+ characters).
+3. Set `ADMIN_EMAIL` to the owner's Google account (and optionally `ADMIN_PASSWORD`, 10+ characters). This only creates the first admin; add further admins and change your password in the admin panel → Settings (Admin accounts, Change my password).
 4. Deploy, or run `npm run dev`. The first request creates the tables and the super admin. Creating the schema is idempotent and runs under an advisory lock, so concurrent cold starts are safe.
 
 Use a Neon branch (for example `dev`) for local work, so development never writes to production data.
@@ -32,6 +32,6 @@ Use a Neon branch (for example `dev`) for local work, so development never write
 
 ## Still to do before real clients
 
-- Password reset and invitation emails (needs a transactional email provider such as Resend or Postmark).
+- Email: create a Resend account, verify your domain (Resend → Domains, add the DNS records), create an API key, then paste the key and sender in Admin → Settings → Email and send a test email.
 - Backups and retention: turn on Neon point-in-time restore for the production branch, and schedule `npm run backup` (see README) for an off-site copy kept encrypted. The privacy policy promises deletion up to 12 months after a programme ends.
 - Privacy policy, consent at sign-up and a data-deletion process for health data.

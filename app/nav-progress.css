@@ -1,0 +1,4 @@
+.rc-nav-progress{position:fixed;inset:0 0 auto 0;height:3px;z-index:9999;pointer-events:none;opacity:0;transition:opacity .3s ease}
+.rc-nav-progress[data-visible="true"]{opacity:1;transition:none}
+.rc-nav-progress-bar{height:100%;background:#e51937;transform-origin:left center;transition:transform .22s ease-out;box-shadow:0 0 10px rgba(229,25,55,.55),0 0 4px rgba(229,25,55,.45)}
+@media (prefers-reduced-motion:reduce){.rc-nav-progress-bar{transition:none}}

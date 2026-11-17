@@ -1,4 +1,5 @@
 import "server-only";
+import {randomBytes} from "node:crypto";
 import postgres from "postgres";
 import {hashPassword} from "./passwords";
 import {istToday} from "./dates";
@@ -129,6 +130,17 @@ const schema = `
   create index if not exists password_tokens_user_idx on password_tokens (user_id);
   -- When the person accepted the privacy policy (self-registration, or setting a password from an invitation).
   alter table users add column if not exists privacy_accepted_at timestamptz;
+  -- Every email the app tried to send (sent, failed or skipped because email isn't set up), kept 180 days.
+  create table if not exists email_log (
+    id bigserial primary key,
+    to_email text not null,
+    subject text not null,
+    kind text not null,
+    status text not null check (status in ('sent', 'failed', 'skipped')),
+    error text,
+    created_at timestamptz not null default now()
+  );
+  create index if not exists email_log_to_idx on email_log (to_email);
   create table if not exists login_attempts (
     key text primary key,
     count integer not null,
@@ -148,14 +160,19 @@ async function prepare(sql: Sql) {
   return sql;
 }
 
-/** Creates the first super admin from ADMIN_EMAIL (Google sign-in) and optional ADMIN_PASSWORD. */
+/**
+ * Creates the first super admin from ADMIN_EMAIL (Google sign-in) and optional ADMIN_PASSWORD, if no user has that email yet.
+ * It never changes an existing account: further admins and password changes are managed in the admin panel (Settings).
+ */
 async function bootstrapAdmin(tx: postgres.TransactionSql) {
   const email = process.env.ADMIN_EMAIL?.trim().toLowerCase();
   if (!email) return;
-  const password = process.env.ADMIN_PASSWORD;
+  const password = process.env.ADMIN_PASSWORD ?? "";
+  if (password && password.length < 10) console.warn("ADMIN_PASSWORD is ignored: it needs at least 10 characters. The admin can still sign in with Google.");
+  const id = `u-admin-${randomBytes(6).toString("hex")}`;
   await tx`insert into users (id, email, name, initials, role, password_hash) values
-    ('u-admin-owner', ${email}, 'Super admin', 'SA', 'admin', ${password && password.length >= 10 ? hashPassword(password) : null})
-    on conflict (email) do nothing`;
+    (${id}, ${email}, 'Super admin', 'SA', 'admin', ${password.length >= 10 ? hashPassword(password) : null})
+    on conflict do nothing`;
 }
 
 /* Sample cohort for demos and tests. Only seeded into an empty database when SEED_DEMO_DATA=true. */

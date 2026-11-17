@@ -2,6 +2,7 @@
 
 import {useActionState, useEffect, useRef} from "react";
 import Link from "next/link";
+import PasswordInput from "./PasswordInput";
 import {Icon} from "./Media";
 import {AuthShell} from "./Login";
 import "./register.css";
@@ -44,8 +45,8 @@ export function ResetPassword({token, valid, invite, firstName}: {token: string;
     <form className="rc-login-form rc-register-form" action={action} noValidate>
       {state?.error && <div className="rc-login-error" role="alert">{state.error}</div>}
       <input type="hidden" name="token" value={token}/>
-      <label><span>New password</span><input name="password" type="password" autoComplete="new-password" placeholder="10+ characters" minLength={10} required/></label>
-      <label><span>Confirm password</span><input name="confirm" type="password" autoComplete="new-password" minLength={10} required/></label>
+      <label><span>New password</span><PasswordInput name="password" autoComplete="new-password" placeholder="10+ characters" minLength={10} required/></label>
+      <label><span>Confirm password</span><PasswordInput name="confirm" autoComplete="new-password" minLength={10} required/></label>
       <label className="rc-register-consent"><input type="checkbox" name="privacy" required/><span>I’ve read and accept the <Link href="/privacy" target="_blank">privacy policy</Link>.</span></label>
       <button type="submit" className="rc-login-submit" disabled={pending}>{pending ? "Saving…" : "Save password"} <Icon name="arrow" size={18}/></button>
     </form>
