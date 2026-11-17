@@ -413,6 +413,14 @@ export async function deleteTrainer(userId: string) {
   });
 }
 
+/** Deletes another admin's account, unless it is the last active admin. */
+export async function deleteAdmin(userId: string) {
+  const sql = await db();
+  const [row] = await sql<{name: string}[]>`delete from users where id = ${userId} and role = 'admin'
+    and (select count(*) from users where role = 'admin' and active and id <> ${userId}) > 0 returning name`;
+  return row?.name ?? null;
+}
+
 export async function deleteMessage(clientId: string, messageId: number) {
   const sql = await db();
   const rows = await sql`delete from messages where id = ${messageId} and client_id = ${clientId} returning id`;

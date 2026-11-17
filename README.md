@@ -6,11 +6,11 @@ Interactive demo of a mobile-friendly online fitness coaching service.
 
 `/` is the public homepage. `/login` signs in members, trainers and the super admin, and each role lands on its own area:
 
-| Role | Area | Demo account (only in a database seeded with `SEED_DEMO_DATA=true`) |
+| Role | Area | How the account is created |
 |---|---|---|
-| Member | `/member/overview` (plan, nutrition, progress, team, membership) | `member@repcount.demo` / `Member#2026`, `member2@repcount.demo` / `Member2#2026` |
-| Trainer | `/trainer` (today, schedule, my clients, check-ins, client details) | `trainer@repcount.demo` / `Trainer#2026`, `trainer2@repcount.demo` / `Trainer2#2026` |
-| Super admin | `/admin` (overview, clients & payments, trainers, settings) | `admin@repcount.demo` / `Admin#2026` |
+| Member | `/member/overview` (plan, nutrition, progress, team, membership) | Self sign-up at `/register`, or added by an admin |
+| Trainer | `/trainer` (today, schedule, my clients, check-ins, client details) | Added by an admin, who sends an invite link |
+| Super admin | `/admin` (overview, clients & payments, trainers, settings) | First one from `ADMIN_EMAIL`; more in admin → Settings |
 
 Signed-out visitors are sent to `/login`; signed-in users who open another role's area are sent back to their own.
 
@@ -45,7 +45,7 @@ Optional. Set `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` to show "Continue wi
 - Credentials are checked by a server action (`app/actions/auth.ts`) against salted scrypt hashes (`lib/users.ts`). Failed attempts are limited in Postgres: 5 per email and IP and 20 per email in 15 minutes, across all server instances.
 - Success sets a signed (HS256), httpOnly, SameSite=Lax session cookie for 7 days (`lib/session.ts`). It carries the user's session version; deactivating an account bumps it, which revokes every existing cookie.
 - `proxy.ts` redirects early; every protected layout re-checks the session, role, active flag and session version on the server (`lib/dal.ts`).
-- The first super admin comes from `ADMIN_EMAIL` (and optional `ADMIN_PASSWORD`). Demo accounts are only created with `SEED_DEMO_DATA=true`, and listed on the login page outside production builds or when `SHOW_DEMO_ACCOUNTS=true`.
+- The first super admin comes from `ADMIN_EMAIL` (and optional `ADMIN_PASSWORD`).
 - Password reset: "Forgot?" on `/login` opens `/forgot-password`, which emails a one-hour, single-use link to `/reset-password` (the same reply whether or not the email exists; 3 requests per email and 10 per IP in 15 minutes). Setting a new password signs the person out everywhere. Only a SHA-256 hash of each link is stored (`password_tokens`).
 - The admin can **Send reset link** for any member (client page) or trainer (Trainers tab). Adding a member or trainer without a password sends a 7-day invitation link to choose one.
 - **Email** (`lib/mail.ts`, templates in `lib/emails.ts`) goes through Resend. The admin pastes the API key and sender in Admin → Settings → Email (key stored AES-256-GCM encrypted, keyed from `SESSION_SECRET`; `RESEND_API_KEY`/`MAIL_FROM` are a fallback), can send a test email, and sees the last 20 emails with their status and any provider error (`email_log`, kept 180 days). Emails sent: welcome and new-member alert to admins on sign-up, payment reference submitted (admins), payment verified, trainer assigned (member and trainer), member question (trainer, or admins while unassigned), staff reply, week plan published (once per week), check-in call link, check-in submitted (trainer) and reviewed (member), password reset, invitation, and password-changed notices. Notifications are sent after the response (`after()`), so a slow or failing email never blocks an action. Without email set up, the admin sees reset/invitation links to pass on by hand.
@@ -54,13 +54,13 @@ Optional. Set `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` to show "Continue wi
 
 - Node.js 22.13 or newer, and a Postgres database (a Neon dev branch, or local Postgres).
 - `npm ci`
-- `cp .env.example .env.local`, then set `SESSION_SECRET` (32+ random characters) and `DATABASE_URL`. Add `SEED_DEMO_DATA=true` to get the sample cohort and demo logins in an empty dev database.
+- `cp .env.example .env.local`, then set `SESSION_SECRET` (32+ random characters) and `DATABASE_URL`.
 - `npm run dev` for the local app.
 - `npm run build` and `npm start` for a production server.
 - `npm test` builds, starts the production server against `TEST_DATABASE_URL` (a throwaway database whose name contains "test"; it is wiped), and checks rendered pages, role access and session revocation.
 - `npm run lint` and `npm run typecheck`. CI runs all of these, plus `npm audit`, on every push and pull request.
 
-Hosting: Vercel, or any Node host, with `DATABASE_URL` pointing at Neon's pooled connection string. Required environment variables: `SESSION_SECRET`, `DATABASE_URL`, `ADMIN_EMAIL`. Optional: `ADMIN_PASSWORD`, `SITE_URL`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `RESEND_API_KEY`, `MAIL_FROM`, `PRIVACY_CONTACT_EMAIL`, `BACKUP_DATABASE_URL`, `SHOW_DEMO_ACCOUNTS`, `SEED_DEMO_DATA` (demo deployments only).
+Hosting: Vercel, or any Node host, with `DATABASE_URL` pointing at Neon's pooled connection string. Required environment variables: `SESSION_SECRET`, `DATABASE_URL`, `ADMIN_EMAIL`. Optional: `ADMIN_PASSWORD`, `SITE_URL`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `RESEND_API_KEY`, `MAIL_FROM`, `PRIVACY_CONTACT_EMAIL`, `BACKUP_DATABASE_URL`.
 
 ## Privacy and backups
 

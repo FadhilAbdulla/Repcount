@@ -67,3 +67,7 @@
 .rc-online-coach-preview .rc-film-toggle{top:5px;bottom:auto;left:5px;right:auto;width:24px;height:24px;min-width:24px;min-height:24px;padding:0;transform:none}
 .rc-online-coach-preview .rc-film-toggle svg{width:12px;height:12px}
 .rc-online-coach-preview span{z-index:3}
+
+/* The home page header stays pinned while the page scrolls; in-page links land below it. */
+.rc-header{position:sticky;top:0;z-index:50}
+html:has(.rc-site){scroll-padding-top:96px}

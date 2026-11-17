@@ -28,7 +28,6 @@ Use a Neon branch (for example `dev`) for local work, so development never write
 
 - No open sign-up. The super admin adds trainers and clients; each can sign in with Google using that email, or with a password the admin sets.
 - Deactivating an account (client detail page, or the trainer card) blocks sign-in and revokes every existing session.
-- Demo logins exist only in a database seeded with `SEED_DEMO_DATA=true`. Never seed a database that will hold real clients.
 
 ## Still to do before real clients
 

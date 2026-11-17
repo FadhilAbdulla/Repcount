@@ -62,3 +62,6 @@ select:disabled{cursor:not-allowed;opacity:.65}
   .rc-skel{animation:rc-shimmer 1.4s linear infinite}
   .notice{animation:rc-rise .3s ease both}
 }
+
+/* The in-app top bar stays pinned while the page scrolls. */
+.topbar{position:sticky;top:0;z-index:9;background:var(--paper)}

@@ -7,6 +7,7 @@ import { SignJWT } from 'jose';
 import postgres from 'postgres';
 import { readFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
+import { seedFixture } from './demo-fixture.mjs';
 
 // Runs against `next start` on a free port, so the proxy, layouts and server actions are exercised for real.
 const SESSION_SECRET = 'test-secret-'.padEnd(48, 'x');
@@ -32,9 +33,12 @@ before(async () => {
  await sql.unsafe('drop schema public cascade; create schema public;');
  const port = await new Promise(resolve => { const s = createServer(); s.listen(0, () => { const p = s.address().port; s.close(() => resolve(p)); }); });
  baseUrl = `http://127.0.0.1:${port}`;
- server = spawn(process.execPath, ['node_modules/next/dist/bin/next', 'start', '-p', String(port), '-H', '127.0.0.1'], {env: {...process.env, SESSION_SECRET, DATABASE_URL, SEED_DEMO_DATA: 'true', SHOW_DEMO_ACCOUNTS: 'false', GOOGLE_CLIENT_ID: 'test-client.apps.googleusercontent.com', GOOGLE_CLIENT_SECRET: 'test-secret', ADMIN_EMAIL: 'Owner@Example.com', ADMIN_PASSWORD: 'short', RESEND_API_KEY: '', MAIL_FROM: '', RESEND_API_URL: `http://127.0.0.1:${fakeResend.address().port}/emails`}, stdio: 'ignore'});
+ server = spawn(process.execPath, ['node_modules/next/dist/bin/next', 'start', '-p', String(port), '-H', '127.0.0.1'], {env: {...process.env, SESSION_SECRET, DATABASE_URL, GOOGLE_CLIENT_ID: 'test-client.apps.googleusercontent.com', GOOGLE_CLIENT_SECRET: 'test-secret', ADMIN_EMAIL: 'Owner@Example.com', ADMIN_PASSWORD: 'short', RESEND_API_KEY: '', MAIL_FROM: '', RESEND_API_URL: `http://127.0.0.1:${fakeResend.address().port}/emails`}, stdio: 'ignore'});
  for (let i = 0; i < 100; i++) {
-  try { await fetch(baseUrl + '/'); return; } catch { await new Promise(r => setTimeout(r, 100)); }
+  try { await fetch(baseUrl + '/'); } catch { await new Promise(r => setTimeout(r, 100)); continue; }
+  // The first request created the schema; now insert the test accounts.
+  await seedFixture(sql);
+  return;
  }
  throw new Error('next start did not respond');
 });

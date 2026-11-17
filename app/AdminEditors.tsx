@@ -4,7 +4,7 @@ import {useState} from "react";
 import {useRouter} from "next/navigation";
 import Modal from "./Modal";
 import {Icon} from "./Media";
-import {addAdmin, changeMyPassword, deleteClient, saveEmailSettings, sendTestEmail, deleteTrainer, editAdmin, editMemberLog, editMembership, setAccountActive} from "./actions/data";
+import {addAdmin, changeMyPassword, deleteAdmin, deleteClient, saveEmailSettings, sendTestEmail, deleteTrainer, editAdmin, editMemberLog, editMembership, setAccountActive} from "./actions/data";
 import type {ClientRow, MemberLog} from "@/lib/store";
 import type {AdminAccount} from "@/lib/users";
 import type {EmailLogRow, MailStatus} from "@/lib/mail";
@@ -97,17 +97,19 @@ export function MemberLogEditor({clientId, firstName, log, today, pending, run}:
 }
 
 /** Permanent deletion of a client or trainer, confirmed by typing their name. */
-export function DeleteAccount({kind, id, name, pending, run}: {kind: "client" | "trainer"; id: string; name: string; pending: boolean; run: Run}) {
+export function DeleteAccount({kind, id, name, pending, run}: {kind: "client" | "trainer" | "admin"; id: string; name: string; pending: boolean; run: Run}) {
   const router = useRouter();
   const [typed, setTyped] = useState("");
   const e = useEditor();
   const what = kind === "client"
     ? "their sign-in, saved progress, history, workout and nutrition plans, messages and payment details"
-    : "their sign-in. Their members become unassigned; plans they wrote stay with the members";
+    : kind === "trainer" ? "their sign-in. Their members become unassigned; plans they wrote stay with the members"
+    : "their admin sign-in. The activity log keeps a record of what they did";
+  const remove = kind === "client" ? deleteClient : kind === "trainer" ? deleteTrainer : deleteAdmin;
   return <>
-    <button type="button" className={kind === "client" ? "button outline rc-danger" : "text-button rc-danger"} onClick={() => {setTyped(""); e.show();}}>Delete {kind === "client" ? "client" : "trainer"} permanently</button>
+    <button type="button" className={kind === "client" ? "button outline rc-danger" : "text-button rc-danger"} onClick={() => {setTyped(""); e.show();}}>Delete {kind} permanently</button>
     <Modal open={e.open} eyebrow="PERMANENT" title={`Delete ${name}?`} onClose={e.close}>
-      <form className="rc-modal-form" onSubmit={ev => {ev.preventDefault(); e.submit(run, () => (kind === "client" ? deleteClient : deleteTrainer)(id, typed), () => { if (kind === "client") router.push("/admin?tab=clients"); });}}>
+      <form className="rc-modal-form" onSubmit={ev => {ev.preventDefault(); e.submit(run, () => remove(id, typed), () => { if (kind === "client") router.push("/admin?tab=clients"); });}}>
         <p>This deletes {what}. It can’t be undone. To deactivate instead, use Deactivate.</p>
         <label className="field">Type <b>{name}</b> to confirm<input value={typed} onChange={ev => setTyped(ev.target.value)} autoComplete="off" required/></label>
         {e.error && <p className="rc-modal-error" role="alert">{e.error}</p>}
@@ -130,6 +132,7 @@ export function AdminAccounts({admins, selfEmail, pending, run}: {admins: AdminA
         <span>
           <button type="button" className="text-button" onClick={() => {setForm({id: a.id, name: a.name, email: a.email, password: ""}); e.show();}}>Edit</button>
           {!self && <button type="button" className="text-button" disabled={pending} onClick={() => run(() => setAccountActive(a.id, !a.active))}>{a.active ? "Deactivate" : "Reactivate"}</button>}
+          {!self && <DeleteAccount kind="admin" id={a.id} name={a.name} pending={pending} run={run}/>}
         </span></li>;
     })}</ul>
     <Modal open={e.open} eyebrow="ADMIN ACCOUNTS" title={adding ? "Add an admin" : `Edit ${form.name || "admin"}`} onClose={e.close}>

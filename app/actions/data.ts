@@ -419,6 +419,19 @@ export async function deleteTrainer(trainerId: string, confirmName: string): Pro
   return {ok: `${trainer.name}’s account was deleted. Their members are now unassigned.`};
 }
 
+/** Permanently deletes another admin's account. You can't delete yourself or the last active admin. */
+export async function deleteAdmin(adminId: string, confirmName: string): Promise<Result> {
+  const user = await requireRole("admin");
+  if (adminId === user.id) return {error: "You can’t delete your own account."};
+  const admin = (await listAdmins()).find(a => a.id === adminId);
+  if (!admin) return {error: "That admin no longer exists."};
+  if (String(confirmName ?? "").trim().toLowerCase() !== admin.name.trim().toLowerCase()) return {error: `Type ${admin.name} exactly to confirm.`};
+  if (!(await store.deleteAdmin(adminId))) return {error: "You can’t delete the last active admin."};
+  await store.audit(user.id, "delete_admin", `${admin.name} · ${admin.email}`, null);
+  revalidatePath("/admin", "layout");
+  return {ok: `${admin.name}’s admin account was deleted.`};
+}
+
 /** Removes one message from a member's conversation. */
 export async function deleteClientMessage(clientId: string, messageId: number): Promise<Result> {
   const user = await requireRole("admin");

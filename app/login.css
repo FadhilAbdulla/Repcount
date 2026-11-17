@@ -21,10 +21,6 @@
 .rc-login-panel{margin:0;max-width:none;display:flex;align-items:center;justify-content:center;padding:clamp(14px,3vh,40px) clamp(18px,4vw,48px);min-height:0;overflow:hidden}
 .rc-login-card{width:min(400px,100%);display:flex;flex-direction:column;gap:clamp(10px,1.9vh,18px)}
 .rc-login-mobile-brand{display:none;font-size:26px;color:#252822;text-decoration:none;align-self:flex-start}
-.rc-login-tabs{display:grid;grid-template-columns:1fr 1fr;gap:4px;padding:4px;border-radius:12px;background:#efebe3}
-.rc-login-tabs a{display:flex;align-items:center;justify-content:center;min-height:clamp(36px,5vh,42px);border-radius:9px;font-size:13px;font-weight:600;color:#6b6d63;text-decoration:none}
-.rc-login-tabs a[aria-current="page"]{background:#fffdf8;color:#252822;box-shadow:0 1px 4px #2528221a}
-.rc-login-tabs a:not([aria-current="page"]):hover{color:#c71331}
 .rc-login h1{font:500 clamp(30px,5.2vh,50px)/1.04 'Manrope',Arial,sans-serif;letter-spacing:-2px;margin:clamp(2px,1vh,8px) 0 0;outline:none}
 .rc-login h1 em{font-family:Georgia,serif;font-weight:400;color:#c71835}
 .rc-login-lead{margin:-4px 0 0;font-size:14px;line-height:1.5;color:#62675b}
@@ -56,11 +52,6 @@
 .rc-login-switch a:hover{text-decoration:underline}
 
 /* Test accounts: one compact row of chips that fill the form. */
-.rc-login-test{border-top:1px solid #e3e0d6;padding-top:clamp(8px,1.5vh,14px)}
-.rc-login-test>span{display:block;font-size:10px;letter-spacing:1.2px;text-transform:uppercase;color:#7b7d73;margin-bottom:8px}
-.rc-login-test>div{display:flex;flex-wrap:wrap;gap:6px}
-.rc-login-test button{padding:6px 11px;min-height:30px;border:1px solid #dfe0d6;border-radius:20px;background:#fffdf8;color:#43483e;font-size:12px;font-weight:600}
-.rc-login-test button:hover{border-color:#e51937;color:#c71331}
 
 /* Tablet & phone: no photo panel; the card owns the screen. */
 @media(max-width:860px){
