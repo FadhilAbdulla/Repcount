@@ -95,16 +95,18 @@ export async function setClientStage(clientId: string, stage: string): Promise<R
   return {ok: `${client.name} moved to ${stage}.`};
 }
 
-/** Cancels a client's membership (status Cancelled) or restores it. Their sign-in is managed separately. */
-export async function setClientCancelled(clientId: string, cancelled: boolean): Promise<Result> {
+/** Deactivates a client (status Deactivated: they can't sign in and are signed out everywhere) or activates them again, unassigned. */
+export async function setClientActive(clientId: string, active: boolean): Promise<Result> {
   const user = await requireRole("admin");
   const client = await store.getClient(clientId);
   if (!client) return {error: "Unknown client."};
-  if (client.cancelled === (cancelled === true)) return {ok: `${client.name} is already ${cancelled ? "cancelled" : "active"}.`};
-  await store.setCancelled(clientId, cancelled === true);
-  await store.audit(user.id, cancelled ? "cancel_membership" : "restore_membership", client.name, clientId);
+  if (client.deactivated === !active) return {ok: `${client.name} is already ${active ? "active" : "deactivated"}.`};
+  await store.setDeactivated(clientId, !active);
+  if (active) await store.assignTrainer(clientId, null); // they come back unassigned; the admin picks a trainer
+  if (client.userId) await setUserActive(client.userId, active);
+  await store.audit(user.id, active ? "reactivate_client" : "deactivate_client", client.name, clientId);
   refreshAll();
-  return {ok: cancelled ? `${client.name}’s membership is cancelled.` : `${client.name}’s membership is restored.`};
+  return {ok: active ? `${client.name} is active again (unassigned) and can sign in. Choose their trainer at the top.` : `${client.name} is deactivated and signed out everywhere.`};
 }
 
 export async function reviewCheckin(clientId: string): Promise<Result> {
@@ -415,18 +417,6 @@ export async function editMemberLog(clientId: string, input: {weights: {label: s
   await store.audit(user.id, "edit_member_log", `${client?.name} · ${weights.length} weigh-ins, ${fats.length} body-fat entries`, clientId);
   refreshAll();
   return {ok: `${client?.name}’s log saved. If their app is open it reloads with your changes.`};
-}
-
-/** Permanently deletes a client and all their data. The admin must type the client's name to confirm. */
-export async function deleteClient(clientId: string, confirmName: string): Promise<Result> {
-  const user = await requireRole("admin");
-  const client = await store.getClient(clientId);
-  if (!client) return {error: "That client no longer exists."};
-  if (String(confirmName ?? "").trim().toLowerCase() !== client.name.trim().toLowerCase()) return {error: `Type ${client.name} exactly to confirm.`};
-  await store.deleteClient(clientId);
-  await store.audit(user.id, "delete_client", "Client and all their data deleted", null);
-  refreshAll();
-  return {ok: `${client.name} and all their data were deleted.`};
 }
 
 /** Permanently deletes a trainer's account; their members become unassigned. The admin must type the name to confirm. */

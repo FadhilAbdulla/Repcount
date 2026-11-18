@@ -84,7 +84,7 @@ export const emails = {
 
   /** A new or changed session, with a calendar invite attached. `area` is where the link opens ("member" for the member). */
   session: (to: Person, change: "new" | "changed" | "cancelled", s: SessionMail, area: "member" | "trainer" | "admin") => {
-    const when = `${formatIstDate(s.startsAt, {weekday: "long", day: "numeric", month: "long"})}, ${formatIstTime(s.startsAt)}–${formatIstTime(s.endsAt)} IST`;
+    const when = `${formatIstDate(s.startsAt, {weekday: "long", day: "numeric", month: "long"})}, ${formatIstTime(s.startsAt)} IST`;
     const withWho = area === "member" ? `with ${s.trainerName}` : `with ${s.memberName}`;
     const verb = change === "new" ? "is booked" : change === "changed" ? "has moved" : "is cancelled";
     const invite = to.email ? calendarInvite({id: s.id, title: `${s.title} · RepCount`, startsAt: s.startsAt, endsAt: s.endsAt, meetingUrl: s.meetingUrl,

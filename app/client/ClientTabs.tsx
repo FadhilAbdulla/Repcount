@@ -1,6 +1,7 @@
 "use client";
 
 /* The Sessions, Messages and Calendar tabs of a client's page, for their trainer and the admin. */
+import {useState} from "react";
 import type {Message} from "@/lib/store";
 import type {Session} from "@/lib/sessions";
 import type {LogEntry} from "@/lib/calendarLog";
@@ -9,21 +10,22 @@ import MonthCalendar from "../sessions/MonthCalendar";
 import SessionForm from "../sessions/SessionForm";
 import SessionList from "../sessions/SessionList";
 import {useAction} from "../useAction";
+import {Icon} from "../Media";
+import Modal from "../Modal";
 
 export function ClientSessions({clientId, firstName, trainerName, sessions}: {clientId: string; firstName: string; trainerName: string; sessions: Session[]}) {
   const {pending, run, notice} = useAction();
+  const [adding, setAdding] = useState(false);
   return <>
     {notice}
-    <div className="two-grid rc-detail-grid rc-sessions-layout">
-      <div className="rc-sessions-main">
-        <SessionList sessions={sessions} viewer="staff" withWho={`with ${trainerName}`} firstName={firstName} pending={pending} run={run}
-          emptyUpcoming={`Nothing booked with ${firstName}. Book the introduction call or this week’s check-in.`}/>
-      </div>
-      <section className="card"><h2>Book a session</h2>
-        <p className="small-note">Introduction call, weekly check-in or a live workout. {firstName} sees it on their Sessions page and can join in one click.</p>
-        <SessionForm clientId={clientId} firstName={firstName} pending={pending} run={run}/>
-      </section>
+    <div className="rc-sessions-main">
+      <SessionList sessions={sessions} viewer="staff" withWho={`with ${trainerName}`} firstName={firstName} pending={pending} run={run}
+        action={<button type="button" className="button dark" onClick={() => setAdding(true)}><Icon name="plus" size={16}/> New session</button>}
+        emptyUpcoming={`Nothing booked with ${firstName} yet. Use New session to book one.`}/>
     </div>
+    <Modal open={adding} eyebrow="SESSIONS" title={`New session with ${firstName}`} onClose={() => setAdding(false)}>
+      <SessionForm clientId={clientId} firstName={firstName} pending={pending} run={run} onDone={() => setAdding(false)}/>
+    </Modal>
   </>;
 }
 

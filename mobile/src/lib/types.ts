@@ -36,7 +36,7 @@ export type Dashboard = {
   weekStart: string;
   user: { name: string; initials: string; email: string };
   needsOnboarding: boolean;
-  member: { memberNo: number; goal: string; stage: string; joinedOn: string | null; cancelled: boolean; meetingUrl: string | null } | null;
+  member: { memberNo: number; goal: string; stage: string; joinedOn: string | null; deactivated: boolean; meetingUrl: string | null } | null;
   coach: { name: string; initials: string } | null;
   state: MemberState;
   revision: number;

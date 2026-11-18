@@ -4,9 +4,9 @@
  * Upcoming and past sessions, shared by the staff Sessions tab and the member's Sessions page.
  * Staff can edit, mark completed or missed, cancel and delete; members can join (from 15 minutes before) and add to their calendar.
  */
-import {useEffect, useState} from "react";
+import {useEffect, useState, type ReactNode} from "react";
 import {formatIstDate, formatIstTime} from "@/lib/dates";
-import {googleCalendarLink, joinable, sessionKindLabels, sessionStatusLabels, sessionTone, type Session} from "@/lib/sessions";
+import {googleCalendarLink, joinable, sessionStatusLabels, sessionTone, type Session} from "@/lib/sessions";
 import {Icon} from "../Media";
 import Modal from "../Modal";
 import {deleteSession, setSessionStatus} from "../actions/sessions";
@@ -40,8 +40,7 @@ function SessionItem({s, viewer, withWho, now, firstName, pending, run}: {
     <div className="rc-session-when" aria-hidden="true"><small>{formatIstDate(start, {weekday: "short"})}</small><b>{formatIstDate(start, {day: "numeric"})}</b><small>{formatIstDate(start, {month: "short"})}</small></div>
     <div className="rc-session-body">
       <h3>{s.title}</h3>
-      <p>{formatIstDate(start, {weekday: "long", day: "numeric", month: "long"})} · {formatIstTime(s.startsAt)}–{formatIstTime(s.endsAt)} IST · {sessionKindLabels[s.kind]}</p>
-      {s.notes && <p>{s.notes}</p>}
+      <p>{formatIstDate(start, {weekday: "long", day: "numeric", month: "long"})} · {formatIstTime(s.startsAt)} IST</p>
       <span className="rc-session-status" data-tone={sessionTone(s)}>{upcoming ? "Upcoming" : sessionStatusLabels[s.status === "scheduled" ? "scheduled" : s.status]}{s.status === "scheduled" && !upcoming ? " · not marked yet" : ""}</span>
     </div>
     <div className="rc-session-actions">
@@ -65,15 +64,17 @@ function SessionItem({s, viewer, withWho, now, firstName, pending, run}: {
 }
 
 /** Upcoming first (soonest at the top), then past (latest first). */
-export default function SessionList({sessions, viewer, withWho, firstName, pending = false, run = () => {}, emptyUpcoming, showPast = true}: {
+export default function SessionList({sessions, viewer, withWho, firstName, pending = false, run = () => {}, emptyUpcoming, showPast = true, action}: {
   sessions: Session[]; viewer: "staff" | "member"; withWho: string; firstName: string; pending?: boolean; run?: Run; emptyUpcoming: string; showPast?: boolean;
+  /** A button in the Upcoming header, e.g. "New session". */
+  action?: ReactNode;
 }) {
   const now = useNow();
   const upcoming = sessions.filter(s => s.status === "scheduled" && Date.parse(s.endsAt) >= now).sort((a, b) => a.startsAt.localeCompare(b.startsAt));
   const past = sessions.filter(s => !upcoming.includes(s)).sort((a, b) => b.startsAt.localeCompare(a.startsAt));
   const item = (s: Session) => <SessionItem key={s.id} s={s} viewer={viewer} withWho={withWho} now={now} firstName={firstName} pending={pending} run={run}/>;
   return <>
-    <section className="card"><div className="section-top"><h2>Upcoming</h2><span className="pill">{upcoming.length} BOOKED</span></div>
+    <section className="card"><div className="section-top"><h2>Upcoming</h2>{action ?? <span className="pill">{upcoming.length} BOOKED</span>}</div>
       {upcoming.length ? <ol className="rc-session-list">{upcoming.map(item)}</ol> : <p className="rc-staff-empty">{emptyUpcoming}</p>}
     </section>
     {showPast && past.length > 0 && <section className="card"><div className="section-top"><h2>Past sessions</h2><span className="pill">{past.length}</span></div>

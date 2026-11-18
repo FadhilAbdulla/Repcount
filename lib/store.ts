@@ -15,8 +15,8 @@ export type ClientRow = {
   goal: string; lastWorkout: string; lastWorkoutOn: string | null; nextCheckIn: string; reference: string | null; checkinNote: string | null;
   email: string | null; phone: string | null; joinedOn: string | null; userId: string | null; accountActive: boolean | null; meetingUrl: string | null;
   intake: Intake | null; bio: Bio | null; memberNo: number;
-  /** The admin cancelled this membership. */
-  cancelled: boolean;
+  /** The admin deactivated this client: no access until they're reactivated. */
+  deactivated: boolean;
   /** This week's planned workouts and how many were done (marked by the member or confirmed by the trainer). progress = done ÷ planned. */
   weekPlanned: number; weekDone: number;
 };
@@ -51,7 +51,7 @@ const toClient = (r: RawClient, today: string): ClientRow => {
     checkinNote: r.checkin_note, email: r.email, phone: r.phone, joinedOn: r.joined_on, userId: r.user_id, accountActive: r.account_active, meetingUrl: r.meeting_url,
     intake: r.intake ? {place: String(r.intake.place ?? ""), days: String(r.intake.days ?? "")} : null,
     bio: r.bio ? {dob: typeof r.bio.dob === "string" ? r.bio.dob : null, gender: typeof r.bio.gender === "string" ? r.bio.gender : null, heightCm: typeof r.bio.heightCm === "number" ? r.bio.heightCm : null} : null,
-    memberNo: Number(r.member_no), cancelled: r.cancelled,
+    memberNo: Number(r.member_no), deactivated: r.cancelled,
   };
 };
 
@@ -109,8 +109,8 @@ export async function verifyPayment(id: string) {
   await sql`update clients set paid = true, stage = case when stage = 'Payment review' then 'Onboarding' else stage end where id = ${id}`;
 }
 
-/** Cancels a membership (status Cancelled) or restores it. */
-export async function setCancelled(id: string, cancelled: boolean) {
+/** Marks a client deactivated (status Deactivated) or active again. The column keeps its original name. */
+export async function setDeactivated(id: string, cancelled: boolean) {
   const sql = await db();
   const rows = await sql`update clients set cancelled_at = ${cancelled ? sql`now()` : null} where id = ${id} returning id`;
   return rows.length > 0;

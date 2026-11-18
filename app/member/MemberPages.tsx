@@ -4,7 +4,7 @@
  * "next session" card on Home, and the Growth page (locked until the mobile app syncs wearables). */
 import {useEffect, useState} from "react";
 import {formatIstDate, formatIstTime} from "@/lib/dates";
-import {googleCalendarLink, sessionKindLabels, type Session} from "@/lib/sessions";
+import {googleCalendarLink, type Session} from "@/lib/sessions";
 import type {LogEntry} from "@/lib/calendarLog";
 import {Icon} from "../Media";
 import MonthCalendar from "../sessions/MonthCalendar";
@@ -47,7 +47,7 @@ export function MemberSessions({sessions, coachName, firstName, month, today, en
     <SessionList sessions={sessions} viewer="member" withWho={`with ${coachName}`} firstName={firstName}
       emptyUpcoming={`${coachName} hasn’t booked a session yet. You’ll get an email with a calendar invite when they do.`}/>
     <MonthCalendar month={month} today={today} entries={entries} legend={calendarLegend} emptyNote="Nothing planned this month yet."/>
-    <p className="small-note">Sessions are video calls: {Object.values(sessionKindLabels).join(", ").toLowerCase()}. The Join button opens 15 minutes before the start.</p>
+    <p className="small-note">Sessions are video calls with {coachName}. The Join button opens 15 minutes before the start.</p>
   </>;
 }
 

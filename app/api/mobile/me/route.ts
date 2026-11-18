@@ -27,7 +27,7 @@ export async function GET(request: Request) {
     user: {name: user.name, initials: user.initials, email: user.email},
     // New members answer the onboarding questions on the website first; the app links there.
     needsOnboarding: !!client && !client.intake,
-    member: client ? {memberNo: client.memberNo, goal: client.goal, stage: client.stage, joinedOn: client.joinedOn, cancelled: client.cancelled, meetingUrl: client.meetingUrl} : null,
+    member: client ? {memberNo: client.memberNo, goal: client.goal, stage: client.stage, joinedOn: client.joinedOn, deactivated: client.deactivated, meetingUrl: client.meetingUrl} : null,
     coach: trainer ? {name: trainer.name, initials: trainer.initials} : null,
     state, revision, schedule, nutritionPlan, confirmed, messages, health,
     // Upcoming booked sessions, soonest first (video calls with the trainer).

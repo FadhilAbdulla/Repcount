@@ -13,8 +13,8 @@ export function Pill({label}: {label: string}) {
   return <span className="rc-pay-status" data-status={pillKey(label)}>{label}</span>;
 }
 
-/** The client's status: Unassigned, Assigned or Cancelled. */
-export const StatusPill = ({client}: {client: {cancelled: boolean; trainerId: string | null}}) => <Pill label={clientStatus(client)}/>;
+/** The client's status: Unassigned, Assigned or Deactivated. */
+export const StatusPill = ({client}: {client: {deactivated: boolean; trainerId: string | null}}) => <Pill label={clientStatus(client)}/>;
 
 /** The client's payment status (phase 2). */
 export const PaymentPill = ({client}: {client: Pick<ClientRow, "paid" | "reference">}) => <Pill label={paymentStatus(client)}/>;

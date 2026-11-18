@@ -1,5 +1,6 @@
 import "server-only";
 import {db} from "./db";
+import {templates} from "./schedule";
 
 /** A trainer's saved workout: a name and its exercises, one per line. */
 export type SavedWorkout = {id: number; trainerId: string; name: string; exercises: string[]};
@@ -7,9 +8,22 @@ export type SavedWorkout = {id: number; trainerId: string; name: string; exercis
 /** Exercises as stored (one per line), cleaned: no blank lines, at most 30 lines of 120 characters. */
 export const exerciseLines = (text: string) => text.split("\n").map(l => l.trim().slice(0, 120)).filter(Boolean).slice(0, 30);
 
+/**
+ * A trainer's workouts. The first time, their list is started with the RepCount templates (lib/schedule.ts), which they can
+ * then edit or delete like their own; a flag in settings stops deleted templates coming back.
+ * A client without a trainer gets the templates themselves (negative ids) so the admin can still plan their days.
+ */
 export async function listSavedWorkouts(trainerId: string | null): Promise<SavedWorkout[]> {
-  if (!trainerId) return [];
+  if (!trainerId) return Object.entries(templates).map(([name, t], i) => ({id: -(i + 1), trainerId: "", name, exercises: t.exercises}));
   const sql = await db();
+  const flag = `workouts_seeded:${trainerId}`;
+  const [seeded] = await sql`select 1 from settings where key = ${flag}`;
+  if (!seeded) await sql.begin(async tx => {
+    for (const [name, t] of Object.entries(templates)) {
+      await tx`insert into workout_templates (trainer_id, name, exercises) values (${trainerId}, ${name}, ${t.exercises.join("\n")}) on conflict (trainer_id, name) do nothing`;
+    }
+    await tx`insert into settings (key, value) values (${flag}, '1') on conflict (key) do nothing`;
+  });
   const rows = await sql<{id: string; trainer_id: string; name: string; exercises: string}[]>`
     select id, trainer_id, name, exercises from workout_templates where trainer_id = ${trainerId} order by lower(name)`;
   return rows.map(r => ({id: Number(r.id), trainerId: r.trainer_id, name: r.name, exercises: exerciseLines(r.exercises)}));

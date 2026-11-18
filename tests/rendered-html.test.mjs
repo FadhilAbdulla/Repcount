@@ -234,7 +234,7 @@ test('a trainer’s schedule and booked sessions reach the member', async () => 
  // Workouts, nutrition and progress each have their own page under the member.
  const akif = await sessionCookie('u-trainer-akif', 'trainer');
  assert.match(readableText(await (await visit('/trainer/clients/c-aarav/workouts', akif)).text()), /Live sessions .*Open Sessions/);
- assert.match(readableText(await (await visit('/trainer/clients/c-aarav/sessions', akif)).text()), /Weekly check-in .*Book a session/);
+ assert.match(readableText(await (await visit('/trainer/clients/c-aarav/sessions', akif)).text()), /Upcoming New session .*Weekly check-in/);
  assert.match(readableText(await (await visit('/trainer/clients/c-aarav/calendar', akif)).text()), /Weekly check-in/);
  assert.match(readableText(await (await visit('/trainer?tab=sessions', akif)).text()), /Aarav · Weekly check-in/);
  // Each day of the week is edited on its own page; unknown weeks and days are 404s.
@@ -553,8 +553,8 @@ test('the admin plans workouts, call links, sessions and nutrition for any clien
  const saved = await callAction('app/actions/data.ts', 'saveSchedule', ['c-riya', week, plan], admin, `/admin/clients/c-riya/workouts/${week}/monday`);
  assert.match(saved.ok ?? JSON.stringify(saved), /1 workout scheduled/);
  assert.equal((await sql`select count(*)::int as n from workout_plans where client_id = 'c-riya' and week_start = ${week}`)[0].n, 1);
- const booking = {kind: 'intro', title: '', date: week, start: '19:00', end: '19:30', meetingUrl: 'https://zoom.us/j/999', notes: ''};
- assert.match((await callAction('app/actions/sessions.ts', 'saveSession', ['c-riya', {...booking, end: '18:00'}], admin, '/admin/clients/c-riya/sessions')).error ?? '', /end after it starts/);
+ const booking = {title: 'Introduction call', date: week, start: '19:00', meetingUrl: 'https://zoom.us/j/999'};
+ assert.match((await callAction('app/actions/sessions.ts', 'saveSession', ['c-riya', {...booking, title: ' '}], admin, '/admin/clients/c-riya/sessions')).error ?? '', /Give the session a title/);
  assert.match((await callAction('app/actions/sessions.ts', 'saveSession', ['c-riya', {...booking, meetingUrl: 'zoom.us/j/1'}], admin, '/admin/clients/c-riya/sessions')).error ?? '', /https:\/\//);
  const booked = await callAction('app/actions/sessions.ts', 'saveSession', ['c-riya', booking], admin, '/admin/clients/c-riya/sessions');
  assert.match(booked.ok ?? JSON.stringify(booked), /Session booked/);
@@ -567,7 +567,7 @@ test('the admin plans workouts, call links, sessions and nutrition for any clien
  const overview = readableText(await (await visit('/admin/clients/c-riya', admin)).text());
  for (const tab of ['Workout plan', 'Nutrition', 'Sessions', 'Messages', 'Calendar', 'Progress & history']) assert.ok(overview.includes(tab.replace('&', '&amp;')) || overview.includes(tab), tab);
  // A trainer still can't touch someone else's client.
- assert.match((await callAction('app/actions/sessions.ts', 'saveSession', ['c-riya', {kind: 'weekly', title: '', date: week, start: '10:00', end: '10:30', meetingUrl: '', notes: ''}], await sessionCookie('u-trainer-akif', 'trainer'), '/trainer/clients/c-aarav/sessions')).error ?? '', /isn’t assigned to you/);
+ assert.match((await callAction('app/actions/sessions.ts', 'saveSession', ['c-riya', {title: 'Check-in', date: week, start: '10:00', meetingUrl: ''}], await sessionCookie('u-trainer-akif', 'trainer'), '/trainer/clients/c-aarav/sessions')).error ?? '', /isn’t assigned to you/);
  const [riyaSession] = await sql`select id from sessions where client_id = 'c-riya'`;
  assert.match((await callAction('app/actions/sessions.ts', 'moveSession', [Number(riyaSession.id), week, '20:00'], await sessionCookie('u-trainer-akif', 'trainer'), '/trainer')).error ?? '', /isn’t assigned to you/);
 });
@@ -592,17 +592,22 @@ test('the admin edits membership dates; payments stay locked until phase 2', asy
  assert.match(await (await visit('/admin?tab=payments', admin)).text(), /Payments are locked for now/);
 });
 
-test('client status is Unassigned, Assigned or Cancelled, and the admin can cancel and restore a membership', async () => {
+test('client status is Unassigned, Assigned or Deactivated, and the admin deactivates and activates clients', async () => {
  const admin = await sessionCookie('u-admin', 'admin');
  const page = await (await visit('/admin?tab=clients', admin)).text();
  assert.match(page, /data-status="assigned"/);
- const cancelled = await callAction('app/actions/data.ts', 'setClientCancelled', ['c-maya', true], admin, '/admin/clients/c-maya');
- assert.match(cancelled.ok ?? JSON.stringify(cancelled), /cancelled/);
- assert.match(await (await visit('/admin/clients/c-maya', admin)).text(), /Restore membership/);
- assert.match((await callAction('app/actions/data.ts', 'setClientCancelled', ['c-maya', false], admin, '/admin/clients/c-maya')).ok ?? '', /restored/);
- const [row] = await sql`select cancelled_at from clients where id = 'c-maya'`;
- assert.equal(row.cancelled_at, null);
- assert.equal((await callAction('app/actions/data.ts', 'setClientCancelled', ['c-maya', true], await sessionCookie('u-trainer-akif', 'trainer'), '/admin/clients/c-maya')).ok, undefined, 'Only admins cancel');
+ const off = await callAction('app/actions/data.ts', 'setClientActive', ['c-maya', false], admin, '/admin/clients/c-maya');
+ assert.match(off.ok ?? JSON.stringify(off), /deactivated and signed out/);
+ const [u] = await sql`select u.active from users u join clients c on c.user_id = u.id where c.id = 'c-maya'`;
+ if (u) assert.equal(u.active, false, 'Their sign-in is blocked too');
+ const detail = readableText(await (await visit('/admin/clients/c-maya', admin)).text());
+ assert.match(detail, /Activate client .* Activate/);
+ assert.doesNotMatch(detail, /Cancel membership|Restore membership|Delete client/);
+ const on = await callAction('app/actions/data.ts', 'setClientActive', ['c-maya', true], admin, '/admin/clients/c-maya');
+ assert.match(on.ok ?? JSON.stringify(on), /active again \(unassigned\)/);
+ const [row] = await sql`select cancelled_at, trainer_id from clients where id = 'c-maya'`;
+ assert.deepEqual({...row}, {cancelled_at: null, trainer_id: null}, 'Activated clients come back unassigned');
+ assert.equal((await callAction('app/actions/data.ts', 'setClientActive', ['c-maya', false], await sessionCookie('u-trainer-akif', 'trainer'), '/admin/clients/c-maya')).ok, undefined, 'Only admins deactivate');
 });
 
 test('the blog: starter articles, admin publishing, SEO pages and the WhatsApp button', async () => {
@@ -676,21 +681,13 @@ test('the admin removes messages; trainers cannot', async () => {
  assert.match((await callAction('app/actions/data.ts', 'deleteClientMessage', ['c-aarav', id], admin, '/admin/clients/c-aarav')).error ?? '', /no longer exists/);
 });
 
-test('the admin permanently deletes a client and all their data', async () => {
+test('clients can’t be deleted from the admin, only deactivated', async () => {
  const admin = await sessionCookie('u-admin', 'admin');
- await sql`insert into messages (client_id, author_id, body) values ('c-onb', 'u-member-onb', 'Delete me too')`;
- assert.match(readableText(await (await visit('/admin/clients/c-onb', admin)).text()), /Delete client permanently/);
- const wrong = await callAction('app/actions/data.ts', 'deleteClient', ['c-onb', 'Someone else'], admin, '/admin/clients/c-onb');
- assert.match(wrong.error ?? '', /Type Omar B exactly/);
- const deleted = await callAction('app/actions/data.ts', 'deleteClient', ['c-onb', 'omar b'], admin, '/admin/clients/c-onb');
- assert.match(deleted.ok ?? JSON.stringify(deleted), /all their data were deleted/);
- const [left] = await sql`select (select count(*)::int from clients where id = 'c-onb') as clients, (select count(*)::int from users where id = 'u-member-onb') as users,
-  (select count(*)::int from messages where client_id = 'c-onb') as messages, (select count(*)::int from password_tokens where user_id = 'u-member-onb') as tokens,
-  (select count(*)::int from member_state where user_id = 'u-member-onb') as states,
-  (select count(*)::int from audit_log where (subject_id = 'c-onb' or subject_id = 'u-member-onb') and detail <> 'Deleted client') as named`;
- assert.deepEqual({...left}, {clients: 0, users: 0, messages: 0, tokens: 0, states: 0, named: 0});
- assert.equal((await visit('/admin/clients/c-onb', admin)).status, 404);
- assert.match(await (await submitForm('/login', {email: 'onb@example.com', password: 'OmarPass#2026'}, '10.7.2.1')).text(), /don’t match an account/);
+ const page = readableText(await (await visit('/admin/clients/c-onb', admin)).text());
+ assert.match(page, /Deactivate client/);
+ assert.doesNotMatch(page, /Delete client/);
+ const manifest = JSON.parse(readFileSync('.next/server/server-reference-manifest.json', 'utf8')).node;
+ assert.ok(!Object.values(manifest).some(a => a.exportedName === 'deleteClient'), 'There is no delete-client action');
 });
 
 test('the admin permanently deletes a trainer; their members become unassigned', async () => {
@@ -937,22 +934,27 @@ test('members save progress, ask questions and delete their own account from the
  assert.equal((await mobile('me', {token})).status, 401);
 });
 
-test('the admin sets a client’s status to unassigned, assigned or cancelled only', async () => {
- const html = await (await visit('/admin/clients/c-kabir', await sessionCookie('u-admin', 'admin'))).text();
- const select = /<select[^>]*aria-label="Status for [^"]*"[^>]*>([\s\S]*?)<\/select>/.exec(html)?.[1] ?? '';
+test('the client header picks the trainer; a deactivated client shows Deactivated there', async () => {
+ const admin = await sessionCookie('u-admin', 'admin');
+ const html = await (await visit('/admin/clients/c-kabir', admin)).text();
+ const select = /<select[^>]*aria-label="Trainer for [^"]*"[^>]*>([\s\S]*?)<\/select>/.exec(html)?.[1] ?? '';
  const options = [...select.matchAll(/<option[^>]*>([^<]*)<\/option>/g)].map(m => m[1]);
  assert.equal(options[0], 'Unassigned');
- assert.equal(options.at(-1), 'Cancelled');
- assert.ok(options.length >= 3, 'Each active trainer is offered under “Assigned to”');
- assert.match(select, /<optgroup label="Assigned to">/);
- assert.doesNotMatch(markupOnly(html), /Payment review|aria-label="Stage for/, 'The old stages are not offered');
+ assert.ok(options.length >= 2 && !options.includes('Deactivated') && !options.includes('Cancelled'), 'Only Unassigned and the trainers');
+ assert.doesNotMatch(markupOnly(html), /Payment review|aria-label="Stage for|aria-label="Status for/, 'Status isn’t changed from the header');
+ await callAction('app/actions/data.ts', 'setClientActive', ['c-kabir', false], admin, '/admin/clients/c-kabir');
+ const off = await (await visit('/admin/clients/c-kabir', admin)).text();
+ assert.doesNotMatch(off, /aria-label="Trainer for/);
+ assert.match(readableText(off), /Deactivated/);
+ await callAction('app/actions/data.ts', 'setClientActive', ['c-kabir', true], admin, '/admin/clients/c-kabir');
+ await sql`update clients set trainer_id = 'u-trainer-akif' where id = 'c-kabir'`;
 });
 
 test('booking a session emails the member a calendar invite with the join link', async () => {
  const akif = await currentCookie('u-trainer-akif', 'trainer');
  await callAction('app/actions/data.ts', 'saveEmailSettings', [{apiKey: 're_test_key_123456', from: 'RepCount <hello@example.com>'}], await sessionCookie('u-admin', 'admin'), '/admin');
  const date = new Date(Date.now() + 3 * 864e5 + 5.5 * 36e5).toISOString().slice(0, 10);
- const booked = await callAction('app/actions/sessions.ts', 'saveSession', ['c-aarav', {kind: 'workout', title: 'Live strength session', date, start: '07:00', end: '07:45', meetingUrl: 'https://meet.google.com/xyz-abcd-efg', notes: 'Bring a mat'}], akif, '/trainer/clients/c-aarav/sessions');
+ const booked = await callAction('app/actions/sessions.ts', 'saveSession', ['c-aarav', {title: 'Live strength session', date, start: '07:00', meetingUrl: 'https://meet.google.com/xyz-abcd-efg'}], akif, '/trainer/clients/c-aarav/sessions');
  assert.match(booked.ok ?? JSON.stringify(booked), /Session booked/);
  const email = await waitFor(() => mailbox.find(m => m.to[0] === 'member@repcount.demo' && /Live strength session is booked/.test(m.subject)), 'session email');
  assert.match(email.text, /Join here at the time: https:\/\/meet\.google\.com\/xyz-abcd-efg/);
@@ -968,7 +970,7 @@ test('booking a session emails the member a calendar invite with the join link',
  const later = new Date(Date.parse(`${date}T00:00:00Z`) + 864e5).toISOString().slice(0, 10);
  assert.match((await callAction('app/actions/sessions.ts', 'moveSession', [Number(row.id), later, '07:00'], akif, '/trainer')).ok ?? '', /Session moved/);
  const [moved] = await sql`select extract(epoch from ends_at - starts_at)::int as seconds from sessions where id = ${row.id}`;
- assert.equal(moved.seconds, 45 * 60);
+ assert.equal(moved.seconds, 30 * 60, 'Sessions are 30 minutes; moving keeps the length');
  await waitFor(() => mailbox.find(m => m.to[0] === 'member@repcount.demo' && /Live strength session has moved/.test(m.subject)), 'moved email');
  assert.match((await callAction('app/actions/sessions.ts', 'setSessionStatus', [Number(row.id), 'cancelled'], akif, '/trainer')).ok ?? '', /cancelled/);
  const cancel = await waitFor(() => mailbox.find(m => m.to[0] === 'member@repcount.demo' && /is cancelled/.test(m.subject)), 'cancel email');
@@ -983,9 +985,16 @@ test('trainers keep their own list of workouts and use them when planning a day'
  assert.match((await save({name: 'Lower body A', exercises: 'Lunge'})).error ?? '', /already have/);
  const [w] = await sql`select id, exercises from workout_templates where name = 'Lower body A'`;
  assert.equal(w.exercises, 'Goblet squat · 3 × 10\nGlute bridge · 3 × 12', 'Blank lines are dropped');
- assert.match(readableText(await (await visit('/trainer?tab=workouts', akif)).text()), /Lower body A 2 exercises/);
+ const library = readableText(await (await visit('/trainer?tab=workouts', akif)).text());
+ assert.match(library, /Lower body A 2 exercises/);
+ assert.match(library, /Full-body foundations/, 'The RepCount templates start the list');
  const dayHtml = await (await visit(`/trainer/clients/c-aarav/workouts/${istWeekStart()}/monday`, akif)).text();
- assert.match(dayHtml, /<optgroup label="Your workouts"><option value="saved:\d+">Lower body A<\/option>/);
+ assert.match(dayHtml, /<option value="saved:\d+">Lower body A<\/option>/);
+ assert.doesNotMatch(dayHtml, /<optgroup|>Custom</, 'One plain list of workouts');
+ const [template] = await sql`select id from workout_templates where trainer_id = 'u-trainer-akif' and name = 'Full-body foundations'`;
+ assert.match((await callAction('app/actions/workouts.ts', 'deleteWorkout', [Number(template.id)], akif, '/trainer')).ok ?? '', /deleted/);
+ await visit('/trainer?tab=workouts', akif);
+ assert.equal((await sql`select count(*)::int as n from workout_templates where trainer_id = 'u-trainer-akif' and name = 'Full-body foundations'`)[0].n, 0, 'A deleted template doesn’t come back');
  assert.doesNotMatch(readableText(dayHtml), /Google Meet link|Start time/, 'Times and links are booked as sessions, not on the workout');
  const other = await currentCookie('u-trainer-2', 'trainer');
  assert.match((await callAction('app/actions/workouts.ts', 'deleteWorkout', [Number(w.id)], other, '/trainer')).error ?? '', /no longer exists/, 'Only the owner can delete it');

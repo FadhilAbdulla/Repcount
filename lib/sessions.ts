@@ -17,28 +17,28 @@ export type Session = {
   meetingUrl: string | null; status: SessionStatus; notes: string | null;
 };
 
-/** What a trainer fills in. Date and times are India time. */
-export type SessionInput = {kind: string; title: string; date: string; start: string; end: string; meetingUrl: string; notes: string};
+/** What a trainer fills in: a title, the day and start time (India time) and the meeting link. */
+export type SessionInput = {title: string; date: string; start: string; meetingUrl: string};
 export type CleanSession = {kind: SessionKind; title: string; startsAt: string; endsAt: string; meetingUrl: string | null; notes: string | null};
+
+/** Sessions have no end time to fill in; calendar invites block out this long. */
+export const SESSION_MINUTES = 30;
 
 const isoDay = /^\d{4}-\d{2}-\d{2}$/;
 const clock = /^([01]\d|2[0-3]):[0-5]\d$/;
 
 /** Checks a session form. Returns the clean session or a message to show. */
 export function validateSession(input: Partial<SessionInput>): CleanSession | {error: string} {
-  const kind = sessionKinds.find(k => k === input.kind);
-  if (!kind) return {error: "Choose the kind of session."};
-  const title = String(input.title ?? "").trim() || sessionKindLabels[kind];
+  const title = String(input.title ?? "").trim();
+  if (!title) return {error: "Give the session a title, e.g. Weekly check-in."};
   if (title.length > 80) return {error: "Keep the title under 80 characters."};
-  const date = String(input.date ?? ""), start = String(input.start ?? ""), end = String(input.end ?? "");
+  const date = String(input.date ?? ""), start = String(input.start ?? "");
   if (!isoDay.test(date)) return {error: "Choose the date."};
-  if (!clock.test(start) || !clock.test(end)) return {error: "Choose a start and end time."};
-  if (end <= start) return {error: "The session must end after it starts."};
+  if (!clock.test(start)) return {error: "Choose the start time."};
   const meetingUrl = cleanMeetingUrl(String(input.meetingUrl ?? ""));
   if (meetingUrl === "invalid") return {error: "The meeting link must be a full https:// link, e.g. https://meet.google.com/abc-defg-hij."};
-  const notes = String(input.notes ?? "").trim();
-  if (notes.length > 1000) return {error: "Keep the notes under 1,000 characters."};
-  return {kind, title, startsAt: istInstant(date, start), endsAt: istInstant(date, end), meetingUrl, notes: notes || null};
+  const startsAt = istInstant(date, start);
+  return {kind: "weekly", title, startsAt, endsAt: new Date(Date.parse(startsAt) + SESSION_MINUTES * 60_000).toISOString(), meetingUrl, notes: null};
 }
 
 /** A session can be joined from 15 minutes before it starts until it ends. */

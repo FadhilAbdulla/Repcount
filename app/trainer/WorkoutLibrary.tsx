@@ -19,8 +19,8 @@ export default function WorkoutLibrary({workouts}: {workouts: SavedWorkout[]}) {
     {notice}
     <section className="card">
       <div className="section-top"><h2>Your workouts</h2><button type="button" className="button dark" onClick={() => setEditing(empty)}><Icon name="plus" size={16}/> Workout</button></div>
-      <p className="small-note">Save the workouts you use often. When you plan a member’s day, pick one from the list instead of typing it again.</p>
-      {workouts.length === 0 ? <p className="rc-staff-empty">No saved workouts yet. Add your first, e.g. “Lower body A”.</p>
+      <p className="small-note">The workouts you pick from when you plan a client’s day. The RepCount templates are here to start you off. Edit or delete them, and add your own.</p>
+      {workouts.length === 0 ? <p className="rc-staff-empty">No workouts yet. Add your first, e.g. “Lower body A”.</p>
         : <ul className="rc-workout-library">{workouts.map(w => <li key={w.id}>
           <div><h3>{w.name}</h3><p>{`${w.exercises.length} exercise${w.exercises.length === 1 ? "" : "s"} · ${w.exercises.slice(0, 3).join(" · ")}${w.exercises.length > 3 ? " …" : ""}`}</p></div>
           <div className="rc-session-actions">

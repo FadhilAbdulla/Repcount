@@ -31,13 +31,13 @@ export type StaffRole = "trainer" | "admin";
 export type StaffUser = {name: string; initials: string; email: string};
 
 const tabs: Record<StaffRole, [string, string, string, string][]> = {
-  trainer: [["today", "home", "Today", "Today"], ["clients", "move", "My members", "Members"], ["sessions", "video", "Sessions", "Sessions"], ["workouts", "edit", "Workouts", "Workouts"], ["checkins", "chat", "Check-ins", "Check-ins"]],
+  trainer: [["today", "home", "Today", "Today"], ["clients", "move", "Clients", "Clients"], ["sessions", "video", "Sessions", "Sessions"], ["workouts", "edit", "Workouts", "Workouts"], ["checkins", "chat", "Check-ins", "Check-ins"]],
   admin: [["overview", "chart", "Overview", "Overview"], ["clients", "users", "Clients", "Clients"], ["sessions", "video", "Sessions", "Sessions"], ["payments", "card", "Payments", "Payments"], ["trainers", "heart", "Trainers", "Trainers"], ["admins", "shield", "Admins", "Admins"], ["activity", "clock", "Activity", "Activity"], ["blog", "edit", "Blog", "Blog"], ["settings", "sliders", "Settings", "Settings"]],
 };
 const headings: Record<string, [string, string]> = {
   today: ["Today’s floor.", "Who’s training, who needs a nudge, and what’s next."],
   clients: ["Clients.", "Everyone you coach, their stage, trainer and progress this week."],
-  members: ["Your members.", "Open a member to plan their week and nutrition, book their sessions and follow their progress."],
+  members: ["Your clients.", "Open a client to plan their week and nutrition, book their sessions and follow their progress."],
   checkins: ["Weekly check-ins.", "Review how each client’s week went and adjust their plan."],
   sessions: ["Sessions.", "Every booked session this month. Drag one to another day to move it, or tap it to change the time."],
   workouts: ["Workouts.", "Your saved workouts. Use them when you plan a member’s day."],
@@ -50,8 +50,8 @@ const headings: Record<string, [string, string]> = {
   settings: ["Settings.", "Pricing, WhatsApp, email and your password."],
 };
 
-export const activityLabels: Record<string, string> = {update_whatsapp: "WhatsApp number changed", add_post: "Blog post added", edit_post: "Blog post edited", delete_post: "Blog post deleted", cancel_membership: "Membership cancelled", restore_membership: "Membership restored", assign_trainer: "Trainer assigned", verify_payment: "Payment verified", review_checkin: "Check-in reviewed", update_settings: "Settings updated", add_trainer: "Trainer added", edit_trainer: "Trainer edited", edit_client: "Client details edited", schedule_week: "Week scheduled", confirm_session: "Session completed", unconfirm_session: "Session completion removed", save_nutrition: "Nutrition plan saved", set_meeting_link: "Call link updated", add_client: "Client added", set_stage: "Stage changed", deactivate_user: "Account deactivated", reactivate_user: "Account reactivated", self_register: "Registered online", ask_coach: "Question sent", reply_member: "Reply sent", send_reset_link: "Reset link sent", edit_membership: "Membership edited", edit_member_log: "Member log corrected", delete_client: "Client deleted", delete_trainer: "Trainer deleted", delete_admin: "Admin deleted", delete_message: "Message removed", add_admin: "Admin added", edit_admin: "Admin edited", change_password: "Password changed", edit_email_settings: "Email settings changed", complete_onboarding: "Onboarding answered"};
-const statusOrder = ["Unassigned", "Assigned", "Cancelled"];
+export const activityLabels: Record<string, string> = {update_whatsapp: "WhatsApp number changed", add_post: "Blog post added", edit_post: "Blog post edited", delete_post: "Blog post deleted", cancel_membership: "Client deactivated", restore_membership: "Client reactivated", deactivate_client: "Client deactivated", reactivate_client: "Client activated", assign_trainer: "Trainer assigned", verify_payment: "Payment verified", review_checkin: "Check-in reviewed", update_settings: "Settings updated", add_trainer: "Trainer added", edit_trainer: "Trainer edited", edit_client: "Client details edited", schedule_week: "Week scheduled", confirm_session: "Session completed", unconfirm_session: "Session completion removed", save_nutrition: "Nutrition plan saved", set_meeting_link: "Call link updated", add_client: "Client added", set_stage: "Stage changed", deactivate_user: "Account deactivated", reactivate_user: "Account reactivated", self_register: "Registered online", ask_coach: "Question sent", reply_member: "Reply sent", send_reset_link: "Reset link sent", edit_membership: "Membership edited", edit_member_log: "Member log corrected", delete_client: "Client deleted", delete_trainer: "Trainer deleted", delete_admin: "Admin deleted", delete_message: "Message removed", add_admin: "Admin added", edit_admin: "Admin edited", change_password: "Password changed", edit_email_settings: "Email settings changed", complete_onboarding: "Onboarding answered"};
+const statusOrder = ["Unassigned", "Assigned", "Deactivated"];
 const sorters: Record<string, (a: ClientRow, b: ClientRow) => number> = {
   Name: (a, b) => a.name.localeCompare(b.name),
   Trainer: (a, b) => (a.trainer === "Unassigned" ? 1 : 0) - (b.trainer === "Unassigned" ? 1 : 0) || a.trainer.localeCompare(b.trainer) || a.name.localeCompare(b.name),
@@ -118,7 +118,7 @@ export default function StaffApp({area: role, user, clients, settings, activity,
 
   /* ---------- Clients ---------- */
   const roster = <section className="card">
-    <div className="section-top"><h2>{admin ? "All clients" : "Your assigned members"}</h2><span className="pill">{visible.length} SHOWN</span></div>
+    <div className="section-top"><h2>{admin ? "All clients" : "Your clients"}</h2><span className="pill">{visible.length} SHOWN</span></div>
     <div className="filters rc-roster-filters">
       <input type="search" aria-label="Search clients by name" placeholder="Search by name…" value={query} onChange={e => setQuery(e.target.value)}/>
       {admin && <select aria-label="Filter clients by status" value={statusFilter} onChange={e => setStatusFilter(e.target.value)}><option>All statuses</option>{clientStatuses.map(s => <option key={s}>{s}</option>)}</select>}
@@ -171,7 +171,7 @@ export default function StaffApp({area: role, user, clients, settings, activity,
     <span className="rc-locked-icon" aria-hidden="true"><Icon name="lock" size={26}/></span>
     <span className="pill">PHASE 2</span>
     <h2>Payments are locked for now.</h2>
-    <p>Online payments and payment verification arrive in phase 2. Until then, clients start straight in onboarding, and each client’s status is Unassigned, Assigned or Cancelled.</p>
+    <p>Online payments and payment verification arrive in phase 2. Until then, clients start straight in onboarding, and each client’s status is Unassigned, Assigned or Deactivated.</p>
     <button type="button" className="button dark" onClick={() => openTab("clients")}>See client statuses →</button>
   </section> : <>
     <div className="three-grid metrics">
@@ -235,7 +235,7 @@ export default function StaffApp({area: role, user, clients, settings, activity,
   const unassigned = clients.filter(c => !c.trainerId);
   const awaiting = clients.filter(c => paymentStatus(c) === "Awaiting verification");
   const incomplete = clients.filter(c => !c.intake);
-  const cancelledCount = clients.filter(c => c.cancelled).length;
+  const deactivatedCount = clients.filter(c => c.deactivated).length;
   const attention: [number, string, string, string, () => void][] = [
     [PAYMENTS_ENABLED ? awaiting.length : 0, "payment reference to verify", "payment references to verify", "Review payments", () => {setPaymentView("Awaiting verification"); openTab("payments");}],
     [unassigned.length, "client without a trainer", "clients without a trainer", "Assign trainers", () => {setTrainerFilter("Unassigned"); openTab("clients");}],
@@ -248,7 +248,7 @@ export default function StaffApp({area: role, user, clients, settings, activity,
   const adminMetrics: [string, string, string][] = [
     [String(clients.length), "Clients", `${clients.filter(c => clientStatus(c) === "Assigned").length} assigned · ${clients.filter(c => clientStatus(c) === "Unassigned").length} unassigned`],
     PAYMENTS_ENABLED ? [money(verifiedCount * Number(settings.price)), "Verified revenue", `${verifiedCount} of ${clients.length} paid`]
-      : [String(clients.length - cancelledCount), "Active memberships", `${cancelledCount} cancelled`],
+      : [String(clients.length - deactivatedCount), "Active clients", `${deactivatedCount} deactivated`],
     [String(activeTrainers), "Trainers", `${clients.length - unassigned.length} of ${clients.length} clients assigned`],
     [String(trainedThisWeek), "Trained this week", `${clients.filter(c => c.weekPlanned > 0).length} of ${clients.length} have a plan`],
   ];

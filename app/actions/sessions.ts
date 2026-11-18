@@ -5,7 +5,7 @@ import {emails, type SessionMail} from "@/lib/emails";
 import {mailStatus, sendLater} from "@/lib/mail";
 import {memberOf, trainerOf} from "@/lib/memberNotify";
 import {istInstant} from "@/lib/dates";
-import {sessionKindLabels, sessionStatuses, validateSession, type Session, type SessionInput, type SessionStatus} from "@/lib/sessions";
+import {sessionStatuses, validateSession, type Session, type SessionInput, type SessionStatus} from "@/lib/sessions";
 import * as sessions from "@/lib/sessionStore";
 import {audit, type ClientRow} from "@/lib/store";
 import type {User} from "@/lib/users";
@@ -42,7 +42,7 @@ export async function saveSession(clientId: string, input: SessionInput, id?: nu
   const savedId = id ?? await sessions.createSession(client.id, clean, user.id);
   const saved = await sessions.getSession(savedId);
   if (saved) await announce(id ? "changed" : "new", saved, client, user.id);
-  await audit(user.id, id ? "edit_session" : "add_session", `${sessionKindLabels[clean.kind]} · ${client.name}`, client.id);
+  await audit(user.id, id ? "edit_session" : "add_session", `${clean.title} · ${client.name}`, client.id);
   refreshAll();
   return {ok: id ? "Session updated. The member has been emailed the new details." : `Session booked. ${client.name.split(" ")[0]} gets an email with a calendar invite.`};
 }

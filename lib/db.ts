@@ -131,7 +131,7 @@ const schema = `
   create index if not exists password_tokens_user_idx on password_tokens (user_id);
   -- When the person accepted the privacy policy (self-registration, or setting a password from an invitation).
   alter table users add column if not exists privacy_accepted_at timestamptz;
-  -- Set when an admin cancels the client's membership (status Cancelled); cleared when it's restored.
+  -- Set when an admin deactivates the client (status Deactivated, no sign-in); cleared when they're reactivated.
   alter table clients add column if not exists cancelled_at timestamptz;
   -- Every email the app tried to send (sent, failed or skipped because email isn't set up), kept 180 days.
   create table if not exists email_log (

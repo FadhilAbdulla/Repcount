@@ -101,7 +101,7 @@
 .rc-stage-control[data-stage="payment-review"]{--dot:#e51937}
 .rc-stage-control[data-stage="assigned"]{--dot:#3a8a43}
 .rc-stage-control[data-stage="unassigned"]{--dot:#d18a16}
-.rc-stage-control[data-stage="cancelled"]{--dot:#8a8984}
+.rc-stage-control[data-stage="deactivated"]{--dot:#8a8984}
 .rc-stage-dot{width:9px;height:9px;border-radius:50%;background:var(--dot);box-shadow:0 0 0 4px color-mix(in srgb,var(--dot) 16%,transparent)}
 .rc-stage-label{font-size:11px;font-weight:600;letter-spacing:.6px;text-transform:uppercase;color:#8a8c81}
 .rc-stage-control select{appearance:none;border:0;background:transparent;font:inherit;font-weight:600;color:#252822;padding:0 20px 0 0;height:100%;cursor:pointer;background-image:linear-gradient(45deg,transparent 50%,#6b6f64 50%),linear-gradient(135deg,#6b6f64 50%,transparent 50%);background-position:calc(100% - 7px) 50%,calc(100% - 3px) 50%;background-size:4px 4px;background-repeat:no-repeat}
@@ -155,10 +155,10 @@
 .rc-staff main>.card+.card,.rc-staff main>.card+section.card{margin-top:22px}
 .rc-settings .rc-modal-form{max-width:560px}
 
-/* ---------- Client status: Unassigned, Assigned, Cancelled ---------- */
+/* ---------- Client status: Unassigned, Assigned, Deactivated ---------- */
 [data-status="assigned"]{background:#e6f1e3;color:#2f6b35}
 [data-status="unassigned"]{background:#fbf0dc;color:#94600f}
-[data-status="cancelled"]{background:#eeece7;color:#6b6a66}
+[data-status="deactivated"]{background:#eeece7;color:#6b6a66}
 
 /* ---------- Locked feature (Payments until phase 2) ---------- */
 .rc-staff .rc-nav-lock{display:inline-grid;place-items:center;background:transparent!important;color:#9a9a90;padding:0!important}

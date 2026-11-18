@@ -9,12 +9,12 @@ import type {ClientRow} from "@/lib/store";
 import type {SavedWorkout} from "@/lib/workoutLibrary";
 import type {Run} from "./useAction";
 type Week = {start: string; label: string};
-/** `kind` is "Rest day", a built-in template name, "saved:<id>" for one of the trainer's workouts, or "Custom". */
+/** `kind` is "Rest day", "saved:<id>" for one of the trainer's workouts, or "current" for a planned workout that isn't in their list. */
 type DraftDay = {kind: string; title: string; exercises: string; duration: string};
 
 const rest: DraftDay = {kind: "Rest day", title: "", exercises: "", duration: ""};
 const toDraft = (w: PlannedWorkout | null): DraftDay => w
-  ? {kind: w.title in templates ? w.title : "Custom", title: w.title, exercises: w.exercises.join("\n"), duration: w.durationMin ? String(w.durationMin) : ""}
+  ? {kind: "current", title: w.title, exercises: w.exercises.join("\n"), duration: w.durationMin ? String(w.durationMin) : ""}
   : rest;
 // Session times and meeting links live in Sessions now, so a planned day only describes the workout.
 const toWorkout = (d: DraftDay): PlannedWorkout | null => d.kind === "Rest day" ? null : {
@@ -97,16 +97,16 @@ export function DayEditor({client, weeks, week, day, plans, saved: library = [],
   saved?: SavedWorkout[]; pending: boolean; run: Run;
 }) {
   const saved = plans[plansKey(client, week)] ?? emptyWeek;
-  const [d, setD] = useState<DraftDay>(() => toDraft(saved[day]));
+  const [d, setD] = useState<DraftDay>(() => {
+    const draft = toDraft(saved[day]);
+    const match = library.find(w => w.name === draft.title);
+    return draft.kind === "current" && match ? {...draft, kind: `saved:${match.id}`} : draft;
+  });
   const update = (change: Partial<DraftDay>) => setD({...d, ...change});
   const choose = (kind: string) => {
-    if (kind === "Rest day") setD(rest);
-    else if (kind === "Custom") update({kind, title: d.title || "Custom session"});
-    else if (kind.startsWith("saved:")) {
-      const w = library.find(x => `saved:${x.id}` === kind);
-      if (w) update({kind, title: w.name, exercises: w.exercises.join("\n")});
-    }
-    else update({kind, title: kind, exercises: templates[kind].exercises.join("\n"), duration: String(templates[kind].durationMin)});
+    if (kind === "Rest day") { setD(rest); return; }
+    const w = library.find(x => `saved:${x.id}` === kind);
+    if (w) update({kind, title: w.name, exercises: w.exercises.join("\n"), duration: d.duration || String(templates[w.name]?.durationMin ?? "")});
   };
   const base = workoutsPath(client.id, area);
   const weekLabel = weeks.find(w => w.start === week)?.label ?? `Week of ${dateOf(week, 0)}`;
@@ -118,11 +118,10 @@ export function DayEditor({client, weeks, week, day, plans, saved: library = [],
     <form onSubmit={e => {e.preventDefault(); run(() => saveSchedule(client.id, week, saved.map((w, i) => i === day ? toWorkout(d) : w)));}}>
       <label><span>Workout</span><select value={d.kind} onChange={e => choose(e.target.value)}>
         <option>Rest day</option>
-        {library.length > 0 && <optgroup label="Your workouts">{library.map(w => <option key={w.id} value={`saved:${w.id}`}>{w.name}</option>)}</optgroup>}
-        <optgroup label="RepCount templates">{Object.keys(templates).map(t => <option key={t}>{t}</option>)}</optgroup>
-        <option>Custom</option>
+        {d.kind === "current" && <option value="current">{d.title}</option>}
+        {library.map(w => <option key={w.id} value={`saved:${w.id}`}>{w.name}</option>)}
       </select></label>
-      {library.length === 0 && area === "trainer" && <p className="small-note">Tip: save workouts you use often under <Link href="/trainer?tab=workouts">Workouts</Link> to pick them here.</p>}
+      {area === "trainer" && <p className="small-note">Add, edit or remove workouts in <Link href="/trainer?tab=workouts">Workouts</Link>. You can still adjust the exercises below for this day.</p>}
       {d.kind !== "Rest day" && <>
         <label><span>Title</span><input value={d.title} onChange={e => update({title: e.target.value})} maxLength={60} required/></label>
         <label><span>About how many minutes</span><input type="number" min={5} max={240} step={5} value={d.duration} onChange={e => update({duration: e.target.value})}/></label>

@@ -4,10 +4,10 @@ import {useTransition, useState} from "react";
 import {Icon} from "./Media";
 import {LineChart, palette} from "./Tracker";
 import {activityLabels} from "./StaffApp";
-import {assignTrainer, sendResetLink, setAccountActive, setClientCancelled, verifyPayment} from "./actions/data";
+import {sendResetLink, setClientActive, verifyPayment} from "./actions/data";
 import type {ClientDetail as Detail, MemberLog} from "@/lib/store";
 import type {HealthSummary} from "@/lib/health";
-import {DeleteAccount, MemberLogEditor, MembershipEditor} from "./AdminEditors";
+import {MemberLogEditor, MembershipEditor} from "./AdminEditors";
 import {StatusPill} from "./Pills";
 import {PAYMENTS_ENABLED} from "@/lib/features";
 import {ageFrom, memberCode} from "@/lib/programme";
@@ -63,7 +63,7 @@ function PhoneHealth({health, firstName}: {health: HealthSummary; firstName: str
  * One client: profile, membership, coaching, saved progress and history, one `section` at a time with tabs between them.
  * The trainer manages coaching; the admin manages coaching too, and can also edit or delete every other record.
  */
-export default function ClientDetail({viewer, section, detail, trainers, coaching, log = null, health = null}: {viewer: "admin" | "trainer"; section?: MemberSection; detail: Detail; trainers: {id: string; name: string}[]; coaching?: Coaching; log?: MemberLog | null; health?: HealthSummary | null}) {
+export default function ClientDetail({viewer, section, detail, coaching, log = null, health = null}: {viewer: "admin" | "trainer"; section?: MemberSection; detail: Detail; coaching?: Coaching; log?: MemberLog | null; health?: HealthSummary | null}) {
   const {client: c, state, history, lastSaved, plan, pastWeeks} = detail;
   const admin = viewer === "admin";
   const firstName = c.name.split(" ")[0];
@@ -105,25 +105,26 @@ export default function ClientDetail({viewer, section, detail, trainers, coachin
         <div><dt>Date of birth</dt><dd>{c.bio?.dob ? `${formatDate(c.bio.dob)} · ${ageFrom(c.bio.dob)} years` : "—"}</dd></div>
         <div><dt>Gender</dt><dd>{c.bio?.gender ?? "—"}</dd></div>
         <div><dt>Height</dt><dd>{c.bio?.heightCm ? `${c.bio.heightCm} cm` : "—"}</dd></div>
-        <div><dt>Member login</dt><dd>{!c.userId ? "No account yet" : c.accountActive ? "Active account" : "Deactivated"}{admin && c.userId && <> <button className="small-button" disabled={pending} onClick={() => run(() => setAccountActive(c.userId!, !c.accountActive, c.id))}>{c.accountActive ? "Deactivate" : "Reactivate"}</button>{c.accountActive && <button className="small-button" disabled={pending} onClick={() => run(() => sendResetLink(c.userId!, c.id))}>Send reset link</button>}</>}</dd></div>
+        <div><dt>Member login</dt><dd>{!c.userId ? "No account yet" : c.accountActive ? "Active account" : "Deactivated"}{admin && c.userId && c.accountActive && <> <button className="small-button" disabled={pending} onClick={() => run(() => sendResetLink(c.userId!, c.id))}>Send reset link</button></>}</dd></div>
         <div><dt>Last saved activity</dt><dd>{lastSaved ? `${lastSaved.slice(0, 16)} UTC` : "—"}</dd></div>
       </dl></section>
 
       <section className="card"><div className="section-top"><h2>Membership &amp; coaching</h2>{admin && <MembershipEditor client={c} pending={pending} run={run}/>}</div><dl className="rc-detail-list">
-        <div><dt>Status</dt><dd><StatusPill client={c}/>{admin && <> <button className="small-button" disabled={pending} onClick={() => { if (c.cancelled || confirm(`Cancel ${c.name}’s membership? You can restore it later.`)) run(() => setClientCancelled(c.id, !c.cancelled)); }}>{c.cancelled ? "Restore membership" : "Cancel membership"}</button></>}</dd></div>
+        <div><dt>Status</dt><dd><StatusPill client={c}/></dd></div>
         {PAYMENTS_ENABLED ? <>
           <div><dt>Payment</dt><dd>{c.paid ? <span className="paid">Verified ✓</span> : !admin ? "Awaiting verification" : <button className="small-button" disabled={pending} onClick={() => run(() => verifyPayment(c.id))}>Verify {c.reference ?? "payment"}</button>}</dd></div>
           <div><dt>Payment reference</dt><dd>{c.reference ?? "—"}</dd></div>
         </> : <div><dt>Payment</dt><dd className="rc-muted">Coming in phase 2</dd></div>}
-        <div><dt>Trainer</dt><dd>{admin ? <select aria-label={`Trainer for ${c.name}`} value={c.trainerId ?? ""} disabled={pending} onChange={e => {const trainerId = e.target.value; run(() => assignTrainer(c.id, trainerId));}}><option value="">Unassigned</option>{trainers.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}</select> : c.trainer}</dd></div>
+        <div><dt>Trainer</dt><dd>{c.trainer}</dd></div>
         <div><dt>Trains</dt><dd>{c.intake ? `${c.intake.place} · ${c.intake.days}` : "—"}</dd></div>
         <div><dt>Latest check-in</dt><dd>{c.checkinNote ? `“${c.checkinNote}”` : "—"}</dd></div>
       </dl></section>
     </div>
 
-    {admin && <section className="card rc-danger-zone"><h2>Delete client</h2>
-      <p>Permanently removes {firstName} and everything stored about them. To pause access instead, use Deactivate under Contact &amp; account.</p>
-      <DeleteAccount kind="client" id={c.id} name={c.name} pending={pending} run={run}/>
+    {admin && <section className="card rc-danger-zone"><h2>{c.deactivated ? "Activate client" : "Deactivate client"}</h2>
+      <p>{c.deactivated ? `${firstName} is deactivated and can’t sign in. Activating restores their access as unassigned; everything they logged is still here.`
+        : `Stops ${firstName}’s access: they can’t sign in and are signed out everywhere. Nothing is deleted, and you can activate them again any time.`}</p>
+      <button type="button" className="button outline" disabled={pending} onClick={() => { if (c.deactivated || confirm(`Deactivate ${c.name}?`)) run(() => setClientActive(c.id, c.deactivated)); }}>{c.deactivated ? "Activate" : "Deactivate"}</button>
     </section>}
 
     </>}
