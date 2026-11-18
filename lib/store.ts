@@ -488,11 +488,6 @@ export async function saveWeekPlan(clientId: string, weekStart: string, plan: We
   });
 }
 
-export async function setMeetingUrl(clientId: string, url: string | null) {
-  const sql = await db();
-  await sql`update clients set meeting_url = ${url} where id = ${clientId}`;
-}
-
 /**
  * This week's completion: planned workouts the member marked done or the trainer confirmed, as a share of all planned workouts.
  * Without a schedule there is nothing to measure.

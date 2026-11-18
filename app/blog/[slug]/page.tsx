@@ -3,6 +3,7 @@ import Link from "next/link";
 import {notFound} from "next/navigation";
 import {publishedPost} from "@/lib/blog";
 import {Markdown, readingMinutes} from "@/lib/markdown";
+import {SITE_URL, jsonLdScript, siteLink} from "@/lib/site";
 
 type Props = {params: Promise<{slug: string}>};
 
@@ -30,11 +31,11 @@ export default async function BlogPost({params}: Props) {
   // Structured data so search engines understand this is an article.
   const jsonLd = {
     "@context": "https://schema.org", "@type": "Article", headline: post.title, description: post.excerpt,
-    datePublished: post.publishedAt, dateModified: post.updatedAt, author: {"@type": "Organization", name: "RepCount"},
-    publisher: {"@type": "Organization", name: "RepCount"}, ...(post.coverUrl ? {image: post.coverUrl} : {}),
+    datePublished: post.publishedAt, dateModified: post.updatedAt, mainEntityOfPage: siteLink(`/blog/${post.slug}`), author: {"@id": `${SITE_URL}/#org`, "@type": "Organization", name: "RepCount"},
+    publisher: {"@id": `${SITE_URL}/#org`, "@type": "Organization", name: "RepCount", logo: siteLink("/repcount-icon-512.png")}, ...(post.coverUrl ? {image: post.coverUrl} : {}),
   };
   return <article className="rc-article">
-    <script type="application/ld+json" dangerouslySetInnerHTML={{__html: JSON.stringify(jsonLd).replace(/</g, "\\u003c")}}/>
+    <script type="application/ld+json" dangerouslySetInnerHTML={jsonLdScript(jsonLd)}/>
     <Link className="rc-article-back" href="/blog">← All articles</Link>
     <header>
       <p className="rc-blog-meta">{date} · {readingMinutes(post.body)} min read</p>

@@ -3,6 +3,7 @@ import {randomBytes} from "node:crypto";
 import postgres from "postgres";
 import {hashPassword} from "./passwords";
 import {starterPosts} from "./blogStarter";
+import {passwordRuleText, validPassword} from "@/lib/passwordRules";
 
 /*
  * Postgres store (Neon in production, any Postgres locally). Set DATABASE_URL to the connection string.
@@ -174,6 +175,35 @@ const schema = `
     updated_at timestamptz not null default now(),
     primary key (user_id, day)
   );
+  -- Video sessions between a member and their trainer: the introduction call, weekly check-ins and live workouts.
+  -- Times are stored as instants and shown in India time. The member's trainer is always the client's current trainer.
+  create table if not exists sessions (
+    id bigserial primary key,
+    client_id text not null references clients(id) on delete cascade,
+    kind text not null check (kind in ('intro', 'weekly', 'workout')),
+    title text not null,
+    starts_at timestamptz not null,
+    ends_at timestamptz not null,
+    meeting_url text,
+    status text not null default 'scheduled' check (status in ('scheduled', 'done', 'missed', 'cancelled')),
+    notes text,
+    created_by text not null,
+    created_at timestamptz not null default now(),
+    updated_at timestamptz not null default now(),
+    check (ends_at > starts_at)
+  );
+  create index if not exists sessions_client_idx on sessions (client_id, starts_at);
+  create index if not exists sessions_start_idx on sessions (starts_at);
+  -- A trainer's own saved workouts, to put on any member's day in one click.
+  create table if not exists workout_templates (
+    id bigserial primary key,
+    trainer_id text not null references users(id) on delete cascade,
+    name text not null,
+    exercises text not null default '',
+    created_at timestamptz not null default now(),
+    updated_at timestamptz not null default now(),
+    unique (trainer_id, name)
+  );
   create table if not exists login_attempts (
     key text primary key,
     count integer not null,
@@ -200,10 +230,10 @@ async function bootstrapAdmin(tx: postgres.TransactionSql) {
   const email = process.env.ADMIN_EMAIL?.trim().toLowerCase();
   if (!email) return;
   const password = process.env.ADMIN_PASSWORD ?? "";
-  if (password && password.length < 10) console.warn("ADMIN_PASSWORD is ignored: it needs at least 10 characters. The admin can still sign in with Google.");
+  if (password && !validPassword(password)) console.warn(`ADMIN_PASSWORD is ignored: it needs ${passwordRuleText}. The admin can still sign in with Google.`);
   const id = `u-admin-${randomBytes(6).toString("hex")}`;
   await tx`insert into users (id, email, name, initials, role, password_hash) values
-    (${id}, ${email}, 'Super admin', 'SA', 'admin', ${password.length >= 10 ? hashPassword(password) : null})
+    (${id}, ${email}, 'Super admin', 'SA', 'admin', ${validPassword(password) ? hashPassword(password) : null})
     on conflict do nothing`;
 }
 

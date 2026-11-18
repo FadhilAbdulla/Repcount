@@ -11,7 +11,8 @@ import {db} from "./db";
  * Every attempt is written to email_log so the admin can see what went out and what failed.
  */
 type MailConfig = {apiKey: string; from: string; source: "admin" | "env"};
-export type Email = {to: string; subject: string; text: string; html: string; kind: string};
+/** `attachments` content is base64 (e.g. a calendar invite). */
+export type Email = {to: string; subject: string; text: string; html: string; kind: string; attachments?: {filename: string; content: string; contentType: string}[]};
 export type MailStatus = {configured: boolean; source: "admin" | "env" | null; from: string; keyHint: string; keyUnreadable: boolean};
 export type EmailLogRow = {id: number; to: string; subject: string; kind: string; status: "sent" | "failed" | "skipped"; error: string | null; at: string};
 
@@ -95,7 +96,8 @@ export async function sendEmail(email: Email): Promise<boolean> {
     const response = await fetch(process.env.RESEND_API_URL || "https://api.resend.com/emails", { // RESEND_API_URL: tests point this at a local fake
       method: "POST",
       headers: {authorization: `Bearer ${config.apiKey}`, "content-type": "application/json"},
-      body: JSON.stringify({from: config.from, to: [email.to], subject: email.subject, text: email.text, html: email.html}),
+      body: JSON.stringify({from: config.from, to: [email.to], subject: email.subject, text: email.text, html: email.html,
+        ...(email.attachments?.length ? {attachments: email.attachments.map(a => ({filename: a.filename, content: a.content, content_type: a.contentType}))} : {})}),
       signal: AbortSignal.timeout(10_000),
     });
     if (response.ok) { await log(email, "sent", null); return true; }
@@ -117,4 +119,4 @@ export function sendLater(...emails: (Email | null | undefined)[]) {
 }
 
 /** Absolute link to a path on this site, from SITE_URL. */
-export const siteLink = (path: string) => new URL(path, process.env.SITE_URL || "http://localhost:3000").toString();
+export {siteLink} from "./site";

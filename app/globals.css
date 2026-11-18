@@ -76,3 +76,5 @@ dialog:not([open]){display:none!important}
 .rc-password-toggle:hover{color:#252822;filter:none;background:#0000000a}
 .rc-password-toggle[aria-pressed="true"]{color:#e51937}
 .rc-password-toggle:focus-visible{outline:2px solid #e51937;outline-offset:0}
+/* Hidden on screen, read by screen readers. */
+.visually-hidden{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}

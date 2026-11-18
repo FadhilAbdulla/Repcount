@@ -8,6 +8,7 @@ import {Icon} from './Media';
 import PasswordInput from './PasswordInput';
 import {login,type LoginState} from './actions/auth';
 import './login.css';
+import {GoogleButton, SubmitButton} from './Buttons';
 
 // High-res portrait (2000×3000) so the tall story panel stays sharp on retina screens.
 const loginPhoto='https://images.pexels.com/photos/4164761/pexels-photo-4164761.jpeg?auto=compress&cs=tinysrgb&w=2000';
@@ -43,7 +44,7 @@ export function AuthShell({children}:{children:React.ReactNode}) {
 /** Sign in for members, trainers and the super admin (password or Google). */
 export default function Login({googleEnabled,notice,success}:{googleEnabled:boolean;notice?:string;success?:string}) {
   const heading=useRef<HTMLHeadingElement>(null);
-  const [state,action,pending]=useActionState<LoginState,FormData>(login,undefined);
+  const [state,action]=useActionState<LoginState,FormData>(login,undefined);
   const error=state?.error??notice;
   useEffect(()=>{heading.current?.focus({preventScroll:true});},[]);
 
@@ -55,8 +56,8 @@ export default function Login({googleEnabled,notice,success}:{googleEnabled:bool
       <label><span>Email</span><input name="email" type="email" placeholder="you@example.com" autoComplete="username" required defaultValue={state?.email} aria-invalid={!!state?.error}/></label>
       <label><span className="rc-login-label-row">Password<Link href="/forgot-password">Forgot?</Link></span>
         <PasswordInput name="password" placeholder="Your password" autoComplete="current-password" required aria-invalid={!!state?.error}/></label>
-      <button type="submit" className="rc-login-submit" disabled={pending}>{pending?'Signing in…':'Sign in'} <Icon name="arrow" size={18}/></button>
-      {googleEnabled&&<a className="rc-login-google" href="/api/auth/google">{googleMark}Continue with Google</a>}
+      <SubmitButton className="rc-login-submit" pendingLabel="Signing in…">Sign in <Icon name="arrow" size={18}/></SubmitButton>
+      {googleEnabled&&<GoogleButton className="rc-login-google" icon={googleMark}>Continue with Google</GoogleButton>}
     </form>
     <p className="rc-login-switch">New to RepCount? <Link href="/register">Create your account →</Link></p>
   </AuthShell>;

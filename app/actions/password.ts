@@ -6,6 +6,7 @@ import {findUser, findUserByEmail, loginLimited, recordLoginFailure} from "@/lib
 import {sendLater} from "@/lib/mail";
 import {emails} from "@/lib/emails";
 import {sendPasswordLink, redeemPasswordToken} from "@/lib/passwordTokens";
+import {passwordRuleText, validPassword} from "@/lib/passwordRules";
 
 export type ForgotState = {sent?: boolean; error?: string; email?: string} | undefined;
 export type ResetState = {error?: string} | undefined;
@@ -31,7 +32,7 @@ export async function resetPassword(_state: ResetState, formData: FormData): Pro
   const token = String(formData.get("token") ?? "");
   const password = String(formData.get("password") ?? "");
   const confirm = String(formData.get("confirm") ?? "");
-  if (password.length < 10 || password.length > 200) return {error: "Choose a password of at least 10 characters."};
+  if (!validPassword(password)) return {error: `Choose a password of ${passwordRuleText}.`};
   if (password !== confirm) return {error: "The two passwords don’t match."};
   if (formData.get("privacy") !== "on") return {error: "Please accept the privacy policy to continue."};
   const redeemed = await redeemPasswordToken(token, password);

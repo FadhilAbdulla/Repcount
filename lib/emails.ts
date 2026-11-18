@@ -1,17 +1,19 @@
 import "server-only";
 import {siteLink, type Email} from "./mail";
 import {PAYMENTS_ENABLED} from "./features";
+import {calendarInvite} from "./calendarInvite";
+import {formatIstDate, formatIstTime} from "./dates";
 
 /*
  * Every email RepCount sends, in one place. Each one has a plain-text and an HTML version built from the same lines,
  * so they read the same in any mail app. Paths are turned into absolute links with SITE_URL.
  */
-type Draft = {to: string | null | undefined; kind: string; subject: string; lines: string[]; quote?: string; cta?: {label: string; path: string}};
+type Draft = {to: string | null | undefined; kind: string; subject: string; lines: string[]; quote?: string; cta?: {label: string; path: string}; attachments?: Email["attachments"]};
 
 const escape = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 const first = (name: string) => name.trim().split(/\s+/)[0] || name;
 
-function render({to, kind, subject, lines, quote, cta}: Draft): Email | null {
+function render({to, kind, subject, lines, quote, cta, attachments}: Draft): Email | null {
   if (!to) return null;
   const url = cta && (/^https?:\/\//.test(cta.path) ? cta.path : siteLink(cta.path));
   const text = [
@@ -32,11 +34,14 @@ ${cta && url ? `<p style="margin:20px 0 6px"><a href="${escape(url)}" style="dis
 </td></tr></table>
 <p style="color:#8a877f;font-size:12px;margin:14px 0 0">You’re receiving this because you have a RepCount account.</p>
 </td></tr></table></body></html>`;
-  return {to, subject, text, html, kind};
+  return {to, subject, text, html, kind, ...(attachments ? {attachments} : {})};
 }
 
 type Person = {name: string; email: string | null | undefined};
 type Member = {id: string; name: string; email: string | null | undefined};
+/** What a session email needs to know. `sequence` grows with each change so calendars update the same event. */
+export type SessionMail = {id: number; clientId: string; title: string; startsAt: string; endsAt: string; meetingUrl: string | null;
+  memberName: string; trainerName: string; organizerEmail: string; sequence: number};
 
 export const emails = {
   welcome: (m: Member) => render({to: m.email, kind: "welcome", subject: "Welcome to RepCount",
@@ -77,9 +82,21 @@ export const emails = {
     lines: [`Hi ${first(m.name)}, ${from} planned ${workouts} workout${workouts === 1 ? "" : "s"} for ${weekLabel}.`],
     cta: {label: "See your plan", path: "/member/plan"}}),
 
-  meetingLink: (m: Member, from: string) => render({to: m.email, kind: "meeting_link", subject: "Your check-in call link",
-    lines: [`Hi ${first(m.name)}, ${from} added the link for your weekly check-in call. Join it from your Profile at the time you agreed.`],
-    cta: {label: "Open your Profile", path: "/member/profile"}}),
+  /** A new or changed session, with a calendar invite attached. `area` is where the link opens ("member" for the member). */
+  session: (to: Person, change: "new" | "changed" | "cancelled", s: SessionMail, area: "member" | "trainer" | "admin") => {
+    const when = `${formatIstDate(s.startsAt, {weekday: "long", day: "numeric", month: "long"})}, ${formatIstTime(s.startsAt)}–${formatIstTime(s.endsAt)} IST`;
+    const withWho = area === "member" ? `with ${s.trainerName}` : `with ${s.memberName}`;
+    const verb = change === "new" ? "is booked" : change === "changed" ? "has moved" : "is cancelled";
+    const invite = to.email ? calendarInvite({id: s.id, title: `${s.title} · RepCount`, startsAt: s.startsAt, endsAt: s.endsAt, meetingUrl: s.meetingUrl,
+      description: `${s.title} ${withWho}.`, attendee: {name: to.name, email: to.email}, organizer: {name: "RepCount", email: s.organizerEmail},
+      cancelled: change === "cancelled", sequence: s.sequence}) : null;
+    return render({to: to.email, kind: `session_${change}`, subject: `${s.title} ${verb}: ${formatIstDate(s.startsAt)} ${formatIstTime(s.startsAt)}`,
+      lines: [`Hi ${first(to.name)}, your ${s.title.toLowerCase()} ${withWho} ${verb}.`, `When: ${when}.`,
+        ...(change !== "cancelled" && s.meetingUrl ? [`Join here at the time: ${s.meetingUrl}`] : []),
+        ...(change !== "cancelled" ? ["The attached invite adds it to your calendar, with a reminder 15 minutes before."] : ["The attached update removes it from your calendar."])],
+      cta: change === "cancelled" ? undefined : {label: "See your sessions", path: area === "member" ? "/member/sessions" : `/${area}/clients/${s.clientId}/sessions`},
+      attachments: invite ? [invite] : undefined});
+  },
 
   checkinSubmitted: (trainer: Person, m: Member, note: string, area: "trainer" | "admin") => render({to: trainer.email, kind: "checkin_submitted", subject: `${first(m.name)} sent their weekly check-in`,
     lines: [`${m.name} sent this week’s check-in: ${note}.`], cta: {label: "Review it", path: `/${area}/clients/${m.id}`}}),

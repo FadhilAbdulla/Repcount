@@ -7,12 +7,11 @@ import Modal from "./Modal";
 import PasswordInput from "./PasswordInput";
 import {DeleteAccount} from "./AdminEditors";
 import {editTrainer, sendResetLink, setAccountActive} from "./actions/data";
-import {StatusPill, paymentStatus} from "./StaffApp";
+import {PaymentPill, StatusPill} from "./Pills";
 import {PAYMENTS_ENABLED} from "@/lib/features";
 import type {ClientRow, TrainerStats} from "@/lib/store";
 
 const formatDate = (iso: string | null) => iso ? new Date(`${iso.slice(0, 10)}T00:00:00Z`).toLocaleDateString("en-GB", {day: "numeric", month: "short", year: "numeric", timeZone: "UTC"}) : "—";
-const key = (s: string) => s.toLowerCase().replace(/[^a-z]+/g, "-");
 
 /** Admin → Trainers → one trainer: their details and sign-in, this week's numbers, account actions and every client they coach. */
 export default function TrainerDetail({trainer: t, clients}: {trainer: TrainerStats; clients: ClientRow[]}) {
@@ -39,7 +38,7 @@ export default function TrainerDetail({trainer: t, clients}: {trainer: TrainerSt
       <div className="rc-detail-identity">
         <span className="large-avatar">{t.initials}</span>
         <div>
-          <p className="eyebrow">TRAINER{t.title && t.title.toLowerCase() !== "trainer" ? ` · ${t.title.toUpperCase()}` : ""}</p>
+          <p className="eyebrow">TRAINER</p>
           <h1 tabIndex={-1}>{t.name}</h1>
           <p className="rc-client-meta"><span>{t.email}</span><span>{t.canUsePassword ? "Password or Google sign-in" : "Google sign-in"}</span><span>Added {formatDate(t.createdAt)}</span></p>
         </div>
@@ -61,7 +60,7 @@ export default function TrainerDetail({trainer: t, clients}: {trainer: TrainerSt
             <td data-label="Client"><Link className="client-name rc-client-link" href={`/admin/clients/${c.id}`}><span className="avatar">{c.initials}</span><span><b>{c.name}</b>{c.email && <small>{c.email}</small>}</span></Link></td>
             <td data-label="This week">{c.weekPlanned ? <><progress max={c.weekPlanned} value={c.weekDone} aria-label={`${c.name}: ${c.weekDone} of ${c.weekPlanned} workouts done this week`}/><small>{c.weekDone} of {c.weekPlanned} workouts</small></> : <small className="rc-muted">No plan this week</small>}</td>
             <td data-label="Last workout">{c.lastWorkout}</td>
-            {PAYMENTS_ENABLED ? <td data-label="Payment"><span className="rc-pay-status" data-status={key(paymentStatus(c))}>{paymentStatus(c)}</span></td> : <td data-label="Status"><StatusPill client={c}/></td>}
+            {PAYMENTS_ENABLED ? <td data-label="Payment"><PaymentPill client={c}/></td> : <td data-label="Status"><StatusPill client={c}/></td>}
           </tr>)}
         </tbody></table></div>}
     </section>
@@ -82,8 +81,7 @@ export default function TrainerDetail({trainer: t, clients}: {trainer: TrainerSt
       {editing && <form className="rc-modal-form" onSubmit={e => {e.preventDefault(); run(async () => {const result = await editTrainer(t.id, editing); if (result.ok) setEditing(null); return result;});}}>
         <label className="field">Full name<input value={editing.name} onChange={e => setEditing({...editing, name: e.target.value})} required maxLength={40} autoComplete="off"/></label>
         <label className="field">Email (Google account)<input type="email" value={editing.email} onChange={e => setEditing({...editing, email: e.target.value})} required autoComplete="off"/></label>
-        <label className="field">Role title<input value={editing.title} onChange={e => setEditing({...editing, title: e.target.value})} maxLength={40}/></label>
-        <label className="field">New password (optional)<PasswordInput value={editing.password} onChange={e => setEditing({...editing, password: e.target.value})} minLength={10} autoComplete="new-password" placeholder="Leave blank to keep the current one"/></label>
+        <label className="field">New password (optional)<PasswordInput value={editing.password} onChange={e => setEditing({...editing, password: e.target.value})} isNew placeholder="Leave blank to keep the current one"/></label>
         <p className="small-note">After an email change the trainer signs in with the new email. A new password signs them out everywhere.</p>
         {notice && noticeError && <p className="rc-modal-error" role="alert">{notice}</p>}
         <button className="button dark" type="submit" disabled={pending}>{pending ? "Saving…" : "Save changes"} →</button>

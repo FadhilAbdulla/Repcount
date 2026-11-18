@@ -1,0 +1,27 @@
+- on client details page 
+    - messages on top tabs
+    - Share a meet link with user as new tab , basically session for introduction , weekly sessions, workout session and remove the current meeting link adding area from workout, 
+    on session will mention start time, and end time, and will it automatically shedule an event in calender and create a meeting link ?
+    - on workout area , will be only mentioning the specific workout of that day 
+    - also for a client detail page for trainer and admin , what about adding a calender log page, which gives an idea that sessions sheduled, nutrision assigned , nutition taken , session is complete, pending sessions, in a calender
+
+- for trainers dashboard , need a new option called Workout List , so new trainer can create new workout list in their specific names and add woukouts on that , so for users they can just assign that workout plan for a day, instead of manually adding full workout on a day 
+- for trainer dashboard , neew option called session as sidebar option, where in a calender they can see all their sessions on a monthly calender, they can drag and drop and change shedules
+
+- for client page 
+    - able to see the nutition assigned, 
+    - able to see the workout plan
+    - option to mark nutrition is taken, 
+    - see next session and one click attend
+    - see monthly/weekly calender
+    - new sidebar option to see growth ( locked right now )- after the mobile is connected , fetch data from wearables
+    - all sidebar options should be on bottom menu as mobile app in mobile screen , becase most of clients will be from mobile and mobile user interface should be top class and user fiendly 
+
+
+
+- Common
+    - loading on logout button, page changes, google login , signup and login area
+    - on whatsapp chat with us button , remove the text onoy icon is fine
+    - add blogs to seo sitempa and llms.txt , make seo very strong
+    - blog footer is broken
+    - make sure all options are mobile friendly 

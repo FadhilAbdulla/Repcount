@@ -11,6 +11,7 @@ import type {ClientRow, MemberLog} from "@/lib/store";
 import type {AdminAccount} from "@/lib/users";
 import type {EmailLogRow, MailStatus} from "@/lib/mail";
 import {moods} from "@/lib/memberState";
+import {PASSWORD_MIN} from "@/lib/passwordRules";
 
 type Result = {ok?: string; error?: string};
 type Run = (action: () => Promise<Result>) => void;
@@ -150,7 +151,7 @@ export function AdminAccounts({admins, selfEmail, pending, run}: {admins: AdminA
       <form className="rc-modal-form" onSubmit={ev => {ev.preventDefault(); e.submit(run, () => adding ? addAdmin(form) : editAdmin(form.id, form));}}>
         <label className="field">Full name<input value={form.name} onChange={ev => setForm({...form, name: ev.target.value})} required maxLength={40} autoComplete="off"/></label>
         <label className="field">Email (Google account)<input type="email" value={form.email} onChange={ev => setForm({...form, email: ev.target.value})} required autoComplete="off"/></label>
-        <label className="field">{adding ? "Password (optional)" : "New password (optional)"}<PasswordInput value={form.password} onChange={ev => setForm({...form, password: ev.target.value})} minLength={10} autoComplete="new-password" placeholder={adding ? "Blank sends an invitation link" : "Leave blank to keep the current one"}/></label>
+        <label className="field">{adding ? "Password (optional)" : "New password (optional)"}<PasswordInput value={form.password} onChange={ev => setForm({...form, password: ev.target.value})} isNew placeholder={adding ? "Blank sends an invitation link" : "Leave blank to keep the current one"}/></label>
         {e.error && <p className="rc-modal-error" role="alert">{e.error}</p>}
         <button className="button dark" type="submit" disabled={pending}>{pending ? "Saving…" : adding ? "Add admin" : "Save changes"} →</button>
       </form>
@@ -173,8 +174,8 @@ export function ChangePassword({hasPassword, pending, run}: {hasPassword: boolea
     });}}>
       {hasPassword && <label className="field">Current password<PasswordInput value={form.current} onChange={ev => setForm({...form, current: ev.target.value})} required autoComplete="current-password"/></label>}
       <div className="rc-modal-row">
-        <label className="field">New password<PasswordInput value={form.next} onChange={ev => setForm({...form, next: ev.target.value})} required minLength={10} maxLength={200} autoComplete="new-password" placeholder="At least 10 characters"/></label>
-        <label className="field">Repeat new password<PasswordInput value={form.confirm} onChange={ev => setForm({...form, confirm: ev.target.value})} required minLength={10} maxLength={200} autoComplete="new-password"/></label>
+        <label className="field">New password<PasswordInput value={form.next} onChange={ev => setForm({...form, next: ev.target.value})} required isNew placeholder={`At least ${PASSWORD_MIN} characters`}/></label>
+        <label className="field">Repeat new password<PasswordInput value={form.confirm} onChange={ev => setForm({...form, confirm: ev.target.value})} required isNew/></label>
       </div>
       {mismatch && <p className="rc-modal-error" role="alert">The two new passwords don’t match.</p>}
       {error && <p className="rc-modal-error" role="alert">{error}</p>}

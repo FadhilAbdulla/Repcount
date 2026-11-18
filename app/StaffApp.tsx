@@ -7,7 +7,6 @@ import {useRouter} from "next/navigation";
 import Brand from "./Brand";
 import {Icon} from "./Media";
 import {BarChart, StaffInsights, palette} from "./Tracker";
-import {logout} from "./actions/auth";
 import {addClient, addTrainer, assignTrainer, reviewCheckin, saveSettings, saveWhatsApp, verifyPayment} from "./actions/data";
 import type {AuditEntry, ClientRow, Settings, TrainerStats} from "@/lib/store";
 import Modal from "./Modal";
@@ -18,29 +17,35 @@ import type {AdminAccount} from "@/lib/users";
 import type {Post} from "@/lib/blog";
 import BlogAdmin from "./BlogAdmin";
 import {PAYMENTS_ENABLED} from "@/lib/features";
+import {PaymentPill, Pill, ProfileIncomplete, StatusPill, paymentStatus} from "./Pills";
 import {clientStatus, clientStatuses} from "@/lib/programme";
 import "./member-polish.css";
 import "./accessibility-polish.css";
 import "./staff.css";
 import "./admin.css";
 import "./staff-ui.css";
+import {LogoutButton} from "./Buttons";
+import AppNav from "./AppNav";
 
 export type StaffRole = "trainer" | "admin";
 export type StaffUser = {name: string; initials: string; email: string};
 
 const tabs: Record<StaffRole, [string, string, string, string][]> = {
-  trainer: [["today", "home", "Today", "Today"], ["clients", "move", "My members", "Members"], ["checkins", "chat", "Check-ins", "Check-ins"]],
-  admin: [["overview", "chart", "Overview", "Overview"], ["clients", "users", "Clients", "Clients"], ["payments", "card", "Payments", "Payments"], ["trainers", "heart", "Trainers", "Trainers"], ["admins", "shield", "Admins", "Admins"], ["blog", "edit", "Blog", "Blog"], ["settings", "sliders", "Settings", "Settings"]],
+  trainer: [["today", "home", "Today", "Today"], ["clients", "move", "My members", "Members"], ["sessions", "video", "Sessions", "Sessions"], ["workouts", "edit", "Workouts", "Workouts"], ["checkins", "chat", "Check-ins", "Check-ins"]],
+  admin: [["overview", "chart", "Overview", "Overview"], ["clients", "users", "Clients", "Clients"], ["sessions", "video", "Sessions", "Sessions"], ["payments", "card", "Payments", "Payments"], ["trainers", "heart", "Trainers", "Trainers"], ["admins", "shield", "Admins", "Admins"], ["activity", "clock", "Activity", "Activity"], ["blog", "edit", "Blog", "Blog"], ["settings", "sliders", "Settings", "Settings"]],
 };
 const headings: Record<string, [string, string]> = {
   today: ["Today’s floor.", "Who’s training, who needs a nudge, and what’s next."],
   clients: ["Clients.", "Everyone you coach, their stage, trainer and progress this week."],
-  members: ["Your members.", "Open a member to plan their week, add their Meet links and nutrition, and mark sessions completed."],
+  members: ["Your members.", "Open a member to plan their week and nutrition, book their sessions and follow their progress."],
   checkins: ["Weekly check-ins.", "Review how each client’s week went and adjust their plan."],
+  sessions: ["Sessions.", "Every booked session this month. Drag one to another day to move it, or tap it to change the time."],
+  workouts: ["Workouts.", "Your saved workouts. Use them when you plan a member’s day."],
   overview: ["Overview.", "Your clients, payments and trainers at a glance."],
   payments: PAYMENTS_ENABLED ? ["Payments.", "Every client’s payment: verify references as they come in."] : ["Payments.", "Online payments are coming in phase 2."],
   trainers: ["Trainers.", "Your coaching team. Open a trainer to see their details and clients."],
   admins: ["Admins.", "Everyone who can manage RepCount."],
+  activity: ["Activity.", "Everything admins and trainers have changed, newest first."],
   blog: ["Blog.", "Health articles and resources for the public website. They help people find RepCount on Google."],
   settings: ["Settings.", "Pricing, WhatsApp, email and your password."],
 };
@@ -57,18 +62,15 @@ const sorters: Record<string, (a: ClientRow, b: ClientRow) => number> = {
 const emptyTrainer = {name: "", email: "", title: "Trainer", password: ""};
 const emptyClient = {name: "", email: "", phone: "", goal: "", trainerId: "", password: ""};
 const formatDate = (iso: string | null) => iso ? new Date(`${iso.slice(0, 10)}T00:00:00Z`).toLocaleDateString("en-GB", {day: "numeric", month: "short", year: "numeric", timeZone: "UTC"}) : "—";
-/** Where a client's payment stands: verified by an admin, a reference waiting for review, or nothing submitted yet. */
-export const paymentStatus = (c: ClientRow) => c.paid ? "Verified" : c.reference ? "Awaiting verification" : "Not submitted";
-const paymentKey = (status: string) => status.toLowerCase().replace(/[^a-z]+/g, "-");
-/** The client's status pill: Unassigned, Assigned or Cancelled. */
-export const StatusPill = ({client}: {client: {cancelled: boolean; trainerId: string | null}}) => {const status = clientStatus(client); return <span className="rc-pay-status" data-status={paymentKey(status)}>{status}</span>;};
 
 type Props = {
   area: StaffRole; user: StaffUser; clients: ClientRow[]; settings: Settings; activity: AuditEntry[];
   trainers?: TrainerStats[]; initialTab?: string; detail?: ReactNode; detailTab?: string; admins?: AdminAccount[]; mail?: {status: MailStatus; recent: EmailLogRow[]}; posts?: Post[];
+  /** Pages built on the server for the open tab (e.g. sessions, workouts), keyed by tab. */
+  pages?: Partial<Record<string, ReactNode>>;
 };
 
-export default function StaffApp({area: role, user, clients, settings, activity, trainers = [], initialTab, detail, detailTab, admins = [], mail, posts = []}: Props) {
+export default function StaffApp({area: role, user, clients, settings, activity, trainers = [], initialTab, detail, detailTab, admins = [], mail, posts = [], pages = {}}: Props) {
   const router = useRouter();
   const admin = role === "admin";
   const [tab, setTab] = useState(initialTab && tabs[role].some(([key]) => key === initialTab) ? initialTab : tabs[role][0][0]);
@@ -128,7 +130,7 @@ export default function StaffApp({area: role, user, clients, settings, activity,
     </div>
     <div className="table-scroll"><table className="rc-cards"><thead><tr><th>Client</th>{admin ? <th>Trainer</th> : <th>Goal</th>}<th>This week</th><th>{admin ? "Joined" : "Last workout"}</th>{admin && <th>Status</th>}</tr></thead><tbody>
       {visible.map(c => <tr key={c.id}>
-        <td data-label="Client"><Link className="client-name rc-client-link" href={clientHref(c)}><span className="avatar">{c.initials}</span><span><b>{c.name}</b>{c.email && <small>{c.email}</small>}</span></Link>{!c.intake && <span className="pill rc-pill-warn" title="Profile completes when the member answers the onboarding questions">Profile incomplete</span>}</td>
+        <td data-label="Client"><Link className="client-name rc-client-link" href={clientHref(c)}><span className="avatar">{c.initials}</span><span><b>{c.name}</b>{c.email && <small>{c.email}</small>}{!c.intake && <ProfileIncomplete under/>}</span></Link></td>
         {admin
           ? <td data-label="Trainer"><select className="rc-inline-select" aria-label={`Trainer for ${c.name}`} value={c.trainerId ?? ""} disabled={pending} onChange={e => {const trainerId = e.target.value; run(() => assignTrainer(c.id, trainerId));}}><option value="">Unassigned</option>{trainers.filter(t => t.active || t.id === c.trainerId).map(t => <option key={t.id} value={t.id}>{t.name}{t.active ? "" : " (inactive)"}</option>)}</select></td>
           : <td data-label="Goal">{c.goal}</td>}
@@ -154,7 +156,7 @@ export default function StaffApp({area: role, user, clients, settings, activity,
         <label className="field">Goal<input value={newClient.goal} onChange={e => setNewClient({...newClient, goal: e.target.value})} maxLength={60} placeholder="e.g. Build strength"/></label>
         <label className="field">Trainer<select value={newClient.trainerId} onChange={e => setNewClient({...newClient, trainerId: e.target.value})}><option value="">Unassigned</option>{trainers.filter(t => t.active).map(t => <option key={t.id} value={t.id}>{t.name}</option>)}</select></label>
       </div>
-      <label className="field">Password (optional)<PasswordInput value={newClient.password} onChange={e => setNewClient({...newClient, password: e.target.value})} minLength={10} autoComplete="new-password" placeholder="Blank sends an invitation link"/></label>
+      <label className="field">Password (optional)<PasswordInput value={newClient.password} onChange={e => setNewClient({...newClient, password: e.target.value})} isNew placeholder="Blank sends an invitation link"/></label>
       {notice && noticeError && <p className="rc-modal-error" role="alert">{notice}</p>}
       <button className="button dark" type="submit" disabled={pending}>{pending ? "Adding…" : "Add client"} →</button>
     </form>
@@ -186,7 +188,7 @@ export default function StaffApp({area: role, user, clients, settings, activity,
           <td data-label="Amount">{money(Number(settings.price))}</td>
           <td data-label="Reference">{c.reference ? <code className="rc-ref">{c.reference}</code> : <span className="rc-muted">—</span>}</td>
           <td data-label="Joined">{formatDate(c.joinedOn)}</td>
-          <td data-label="Status"><span className="rc-pay-status" data-status={paymentKey(status)}>{status}</span></td>
+          <td data-label="Status"><Pill label={status}/></td>
           <td data-label="" className="rc-row-actions">{!c.paid && c.reference && <button className="small-button dark" disabled={pending} onClick={() => run(() => verifyPayment(c.id))}>Verify</button>}<MembershipEditor client={c} pending={pending} run={run}/></td>
         </tr>;})}
         {paymentRows.length === 0 && <tr className="member-empty-row"><td colSpan={6} data-label="">{paymentView === "Awaiting verification" ? "Nothing to verify. All caught up." : "No payments in this view."}</td></tr>}
@@ -201,7 +203,7 @@ export default function StaffApp({area: role, user, clients, settings, activity,
     {trainers.length === 0 ? <p className="rc-staff-empty">No trainers yet. Add your first trainer to start assigning clients.</p>
       : <div className="table-scroll"><table className="rc-cards"><thead><tr><th>Trainer</th><th>Email</th><th>Clients</th><th>Workouts this week</th><th>Status</th></tr></thead><tbody>
         {trainers.map(t => <tr key={t.id}>
-          <td data-label="Trainer"><Link className="client-name rc-client-link" href={`/admin/trainers/${t.id}`}><span className="avatar">{t.initials}</span><span><b>{t.name}</b><small>{t.title}</small></span></Link></td>
+          <td data-label="Trainer"><Link className="client-name rc-client-link" href={`/admin/trainers/${t.id}`}><span className="avatar">{t.initials}</span><span><b>{t.name}</b></span></Link></td>
           <td data-label="Email">{t.email}</td>
           <td data-label="Clients">{t.clients}</td>
           <td data-label="Workouts this week">{t.workoutsPlanned ? `${t.workoutsDone} of ${t.workoutsPlanned} · ${t.completion}%` : <span className="rc-muted">None planned</span>}</td>
@@ -215,8 +217,7 @@ export default function StaffApp({area: role, user, clients, settings, activity,
     <form className="rc-modal-form" onSubmit={e => {e.preventDefault(); run(async () => {const result = await addTrainer(newTrainer); if (result.ok) {setNewTrainer(emptyTrainer); setAddingTrainer(false);} return result;});}}>
       <label className="field">Full name<input value={newTrainer.name} onChange={e => setNewTrainer({...newTrainer, name: e.target.value})} required maxLength={40} autoComplete="off"/></label>
       <label className="field">Email (Google account)<input type="email" value={newTrainer.email} onChange={e => setNewTrainer({...newTrainer, email: e.target.value})} required autoComplete="off"/></label>
-      <label className="field">Role title<input value={newTrainer.title} onChange={e => setNewTrainer({...newTrainer, title: e.target.value})} maxLength={40}/></label>
-      <label className="field">Password (optional)<PasswordInput value={newTrainer.password} onChange={e => setNewTrainer({...newTrainer, password: e.target.value})} minLength={10} autoComplete="new-password" placeholder="Blank sends an invitation link"/></label>
+      <label className="field">Password (optional)<PasswordInput value={newTrainer.password} onChange={e => setNewTrainer({...newTrainer, password: e.target.value})} isNew placeholder="Blank sends an invitation link"/></label>
       {notice && noticeError && <p className="rc-modal-error" role="alert">{notice}</p>}
       <button className="button dark" type="submit" disabled={pending}>{pending ? "Adding…" : "Add trainer"} →</button>
     </form>
@@ -260,12 +261,16 @@ export default function StaffApp({area: role, user, clients, settings, activity,
       </section>
       <section className="card"><div className="section-top"><h2>Newest clients</h2><button type="button" className="small-button" onClick={() => {setSort("Newest"); openTab("clients");}}>All clients →</button></div>
         {newest.length === 0 ? <p className="rc-staff-empty">No clients yet.</p>
-          : <ul className="rc-mini-list">{newest.map(c => <li key={c.id}><Link className="client-name rc-client-link" href={clientHref(c)}><span className="avatar">{c.initials}</span><span><b>{c.name}</b><small>{c.trainer === "Unassigned" ? "No trainer yet" : c.trainer} · joined {formatDate(c.joinedOn)}</small></span></Link>{PAYMENTS_ENABLED ? <span className="rc-pay-status" data-status={paymentKey(paymentStatus(c))}>{paymentStatus(c)}</span> : <StatusPill client={c}/>}</li>)}</ul>}
+          : <ul className="rc-mini-list">{newest.map(c => <li key={c.id}><Link className="client-name rc-client-link" href={clientHref(c)}><span className="avatar">{c.initials}</span><span><b>{c.name}</b><small>{c.trainer === "Unassigned" ? "No trainer yet" : c.trainer} · joined {formatDate(c.joinedOn)}</small></span></Link>{PAYMENTS_ENABLED ? <PaymentPill client={c}/> : <StatusPill client={c}/>}</li>)}</ul>}
       </section>
     </div>
     <StaffInsights clients={clients}/>
     {trainerPerformance}
-    <section className="card"><div className="section-top"><h2>Recent activity</h2><span className="pill">AUDIT LOG</span></div>{activity.length === 0 ? <p className="rc-staff-empty">No admin or trainer actions yet.</p> : <ul className="rc-staff-activity">{activity.map((a, i) => <li key={i}><b>{activityLabels[a.action] ?? a.action}</b><span>{a.detail} · by {a.actor}</span><time dateTime={a.at.replace(" ", "T") + "Z"}>{a.at.slice(0, 16)} UTC</time></li>)}</ul>}</section>
+  </>;
+
+  /* ---------- Activity (admin) ---------- */
+  const activityLog = <>
+    <section className="card"><div className="section-top"><h2>Activity log</h2><span className="pill">{activity.length} LATEST</span></div>{activity.length === 0 ? <p className="rc-staff-empty">No admin or trainer actions yet.</p> : <ul className="rc-staff-activity">{activity.map((a, i) => <li key={i}><b>{activityLabels[a.action] ?? a.action}</b><span>{a.detail} · by {a.actor}</span><time dateTime={a.at.replace(" ", "T") + "Z"}>{a.at.slice(0, 16)} UTC</time></li>)}</ul>}</section>
   </>;
 
   /* ---------- Trainer home ---------- */
@@ -321,12 +326,12 @@ export default function StaffApp({area: role, user, clients, settings, activity,
     <aside className="sidebar">
       <span className="brand"><Brand/></span>
       <div className="workspace-label">{admin ? "ADMIN" : "TRAINER WORKSPACE"}</div>
-      <nav aria-label={admin ? "Admin navigation" : "Trainer navigation"}>{tabs[role].map(([key, icon, label, short]) => <button key={key} title={label} className={current === key ? "nav active" : "nav"} aria-current={current === key ? "page" : undefined} onClick={() => openTab(key)}><span aria-hidden="true"><Icon name={icon} size={20}/></span><span className="nav-label">{label}</span><span className="nav-short" aria-hidden="true">{short}</span>{key === "checkins" && dueCheckIns.length > 0 && <small>{dueCheckIns.length}</small>}{key === "payments" && (PAYMENTS_ENABLED ? awaiting.length > 0 && <small>{awaiting.length}</small> : <small className="rc-nav-lock" title="Coming in phase 2"><Icon name="lock" size={12}/></small>)}</button>)}</nav>
-      <div className="sidebar-bottom"><form action={logout}><button type="submit" className="rc-sidebar-logout"><Icon name="logout" size={18}/> Log out</button></form></div>
+      <AppNav items={tabs[role]} active={current ?? ""} onSelect={openTab} label={admin ? "Admin navigation" : "Trainer navigation"}/>
+      <div className="sidebar-bottom"><LogoutButton look="both" className="rc-sidebar-logout"/></div>
     </aside>
     <div className="content">
       <header className="topbar"><span className="rc-topbar-status" role="status">{pending ? "Saving…" : ""}</span>
-        <div className="rc-topbar-user"><div><b>{user.name}</b><small>{user.email}</small></div><span className="top-avatar" aria-hidden="true">{user.initials}</span><form action={logout} className="rc-topbar-logout"><button type="submit" aria-label="Log out"><Icon name="logout" size={18}/></button></form></div>
+        <div className="rc-topbar-user"><div><b>{user.name}</b><small>{user.email}</small></div><span className="top-avatar" aria-hidden="true">{user.initials}</span><LogoutButton look="icon" formClassName="rc-topbar-logout"/></div>
       </header>
       <main id="main">
         {detail ?? <>
@@ -342,9 +347,11 @@ export default function StaffApp({area: role, user, clients, settings, activity,
         {tab === "payments" && admin && payments}
         {tab === "checkins" && checkIns}
         {tab === "trainers" && admin && <>{trainerList}{addTrainerModal}</>}
+        {tab === "activity" && admin && activityLog}
         {tab === "admins" && admin && <AdminAccounts admins={admins} selfEmail={user.email} pending={pending} run={run}/>}
         {tab === "blog" && admin && <BlogAdmin posts={posts} pending={pending} run={run}/>}
         {tab === "settings" && admin && settingsPage}
+        {pages[tab]}
         </>}
       </main>
     </div>

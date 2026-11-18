@@ -3,22 +3,23 @@
 import {useState} from "react";
 import Link from "next/link";
 import {Icon} from "./Media";
-import {saveMeetingLink, saveSchedule} from "./actions/data";
-import {dayNames, daySlugs, formatTime, templates, type PlannedWorkout, type WeekPlan} from "@/lib/schedule";
+import {saveSchedule} from "./actions/data";
+import {dayNames, daySlugs, templates, type PlannedWorkout, type WeekPlan} from "@/lib/schedule";
 import type {ClientRow} from "@/lib/store";
-
-type Result = {ok?: string; error?: string};
-type Run = (action: () => Promise<Result>) => void;
+import type {SavedWorkout} from "@/lib/workoutLibrary";
+import type {Run} from "./useAction";
 type Week = {start: string; label: string};
-type DraftDay = {kind: string; title: string; exercises: string; time: string; duration: string; meetingUrl: string};
+/** `kind` is "Rest day", a built-in template name, "saved:<id>" for one of the trainer's workouts, or "Custom". */
+type DraftDay = {kind: string; title: string; exercises: string; duration: string};
 
-const rest: DraftDay = {kind: "Rest day", title: "", exercises: "", time: "", duration: "", meetingUrl: ""};
+const rest: DraftDay = {kind: "Rest day", title: "", exercises: "", duration: ""};
 const toDraft = (w: PlannedWorkout | null): DraftDay => w
-  ? {kind: w.title in templates ? w.title : "Custom", title: w.title, exercises: w.exercises.join("\n"), time: w.time ?? "", duration: w.durationMin ? String(w.durationMin) : "", meetingUrl: w.meetingUrl ?? ""}
+  ? {kind: w.title in templates ? w.title : "Custom", title: w.title, exercises: w.exercises.join("\n"), duration: w.durationMin ? String(w.durationMin) : ""}
   : rest;
+// Session times and meeting links live in Sessions now, so a planned day only describes the workout.
 const toWorkout = (d: DraftDay): PlannedWorkout | null => d.kind === "Rest day" ? null : {
-  title: d.title.trim(), exercises: d.exercises.split("\n").map(e => e.trim()).filter(Boolean), time: d.time || null,
-  durationMin: d.duration ? Number(d.duration) : null, meetingUrl: d.meetingUrl.trim() || null,
+  title: d.title.trim(), exercises: d.exercises.split("\n").map(e => e.trim()).filter(Boolean), time: null,
+  durationMin: d.duration ? Number(d.duration) : null, meetingUrl: null,
 };
 const emptyWeek: WeekPlan = Array(7).fill(null);
 const dateOf = (week: string, i: number, opts: Intl.DateTimeFormatOptions = {day: "numeric", month: "short"}) => new Date(Date.parse(`${week}T00:00:00Z`) + i * 86400000).toLocaleDateString("en-GB", {...opts, timeZone: "UTC"});
@@ -28,7 +29,7 @@ const plansKey = (client: ClientRow, week: string) => `${client.id}|${week}`;
 export const workoutsPath = (clientId: string, area: "trainer" | "admin" = "trainer") => `/${area}/clients/${clientId}/workouts`;
 
 /**
- * The Workout plan page for one member: pick a week, set their check-in call link, and see the seven days as cards.
+ * The Workout plan page for one member: pick a week and see the seven days as cards.
  * Each card opens that day's own page to edit it; whole-week shortcuts save straight away.
  */
 export function WeekOverview({client, weeks, week, plans, today, pending, run, area = "trainer"}: {
@@ -41,7 +42,6 @@ export function WeekOverview({client, weeks, week, plans, today, pending, run, a
   const workouts = days.filter(Boolean).length;
   // The rhythm the member chose at onboarding, e.g. "3 days a week" → 3.
   const preferred = client.intake ? Number(/\d+/.exec(client.intake.days)?.[0] ?? NaN) || null : null;
-  const [allLink, setAllLink] = useState("");
   const firstName = client.name.split(" ")[0];
   const base = workoutsPath(client.id, area);
   // Shortcuts replace the saved week, so ask before overwriting workouts that are already there.
@@ -68,8 +68,7 @@ export function WeekOverview({client, weeks, week, plans, today, pending, run, a
           <span className="rc-week-day-top"><b>{dayNames[i]}</b><small>{dateOf(week, i)}{iso === today ? " · today" : ""}</small></span>
           {w ? <>
             <strong>{w.title}</strong>
-            <small>{[w.time && `${formatTime(w.time)} IST`, w.durationMin && `${w.durationMin} min`, `${w.exercises.length} exercise${w.exercises.length === 1 ? "" : "s"}`].filter(Boolean).join(" · ")}</small>
-            {w.meetingUrl && <span className="rc-week-live"><Icon name="video" size={14}/> Live session</span>}
+            <small>{[w.durationMin && `${w.durationMin} min`, `${w.exercises.length} exercise${w.exercises.length === 1 ? "" : "s"}`].filter(Boolean).join(" · ")}</small>
           </> : <><strong>Rest day</strong><small>Tap to plan a workout</small></>}
           <span className="rc-week-edit">{w ? "Edit" : "Plan"} <Icon name="arrow" size={14}/></span>
         </Link></li>;
@@ -85,27 +84,17 @@ export function WeekOverview({client, weeks, week, plans, today, pending, run, a
           <button type="button" className="small-button" disabled={pending} onClick={() => replace(quickFill, "Quick fill")}>Quick fill: Mon · Wed · Fri</button>
           {workouts > 0 && <button type="button" className="small-button" disabled={pending} onClick={() => replace(emptyWeek, "Clearing the week")}>Clear week</button>}
         </div>
-        {workouts > 0 && <form className="rc-schedule-link" onSubmit={e => {e.preventDefault(); run(() => saveSchedule(client.id, week, days.map(d => d && {...d, meetingUrl: allLink.trim()})));}}>
-          <label><span>Same Meet link for every session</span><input type="url" inputMode="url" required placeholder="https://meet.google.com/…" value={allLink} onChange={e => setAllLink(e.target.value)}/></label>
-          <button type="submit" className="button outline" disabled={pending || !allLink.trim()}><Icon name="video" size={16}/> Apply</button>
-        </form>}
       </section>
-      <section className="card rc-schedule"><h2>Weekly check-in call</h2><p className="small-note">Shown on {firstName}’s profile as “Join check-in call”.</p><MeetingLink client={client} pending={pending} run={run}/></section>
+      <section className="card rc-schedule"><h2>Live sessions</h2><p className="small-note">Check-in calls and live workouts with {firstName} are booked on the Sessions tab, with a calendar invite for both of you.</p><Link className="button outline" href={`/${area}/clients/${client.id}/sessions`}><Icon name="video" size={16}/> Open Sessions</Link></section>
     </div>
   </>;
 }
 
-function MeetingLink({client, pending, run}: {client: ClientRow; pending: boolean; run: Run}) {
-  const [url, setUrl] = useState(client.meetingUrl ?? "");
-  return <form className="rc-schedule-link" onSubmit={e => {e.preventDefault(); run(() => saveMeetingLink(client.id, url));}}>
-    <label><span>Weekly check-in call link</span><input type="url" inputMode="url" placeholder="https://meet.google.com/…" value={url} onChange={e => setUrl(e.target.value)}/></label>
-    <button className="button outline" type="submit" disabled={pending}><Icon name="video" size={16}/> Save link</button>
-  </form>;
-}
-
 /** One day of a member's week on its own page. Saving keeps the rest of the week as it is. */
-export function DayEditor({client, weeks, week, day, plans, pending, run, area = "trainer"}: {
-  area?: "trainer" | "admin"; client: ClientRow; weeks: Week[]; week: string; day: number; plans: Record<string, WeekPlan | null>; pending: boolean; run: Run;
+export function DayEditor({client, weeks, week, day, plans, saved: library = [], pending, run, area = "trainer"}: {
+  area?: "trainer" | "admin"; client: ClientRow; weeks: Week[]; week: string; day: number; plans: Record<string, WeekPlan | null>;
+  /** The trainer's saved workouts (Trainer → Workouts). */
+  saved?: SavedWorkout[]; pending: boolean; run: Run;
 }) {
   const saved = plans[plansKey(client, week)] ?? emptyWeek;
   const [d, setD] = useState<DraftDay>(() => toDraft(saved[day]));
@@ -113,6 +102,10 @@ export function DayEditor({client, weeks, week, day, plans, pending, run, area =
   const choose = (kind: string) => {
     if (kind === "Rest day") setD(rest);
     else if (kind === "Custom") update({kind, title: d.title || "Custom session"});
+    else if (kind.startsWith("saved:")) {
+      const w = library.find(x => `saved:${x.id}` === kind);
+      if (w) update({kind, title: w.name, exercises: w.exercises.join("\n")});
+    }
     else update({kind, title: kind, exercises: templates[kind].exercises.join("\n"), duration: String(templates[kind].durationMin)});
   };
   const base = workoutsPath(client.id, area);
@@ -123,14 +116,16 @@ export function DayEditor({client, weeks, week, day, plans, pending, run, area =
     <Link className="rc-back-link" href={`${base}?week=${week}`}>← {weekLabel}</Link>
     <div className="section-top"><h2>{dayNames[day]}, {dateOf(week, day, {weekday: undefined, day: "numeric", month: "long"})}</h2><span className="pill">{saved[day] ? "PLANNED" : "REST DAY"}</span></div>
     <form onSubmit={e => {e.preventDefault(); run(() => saveSchedule(client.id, week, saved.map((w, i) => i === day ? toWorkout(d) : w)));}}>
-      <label><span>Session</span><select value={d.kind} onChange={e => choose(e.target.value)}><option>Rest day</option>{Object.keys(templates).map(t => <option key={t}>{t}</option>)}<option>Custom</option></select></label>
+      <label><span>Workout</span><select value={d.kind} onChange={e => choose(e.target.value)}>
+        <option>Rest day</option>
+        {library.length > 0 && <optgroup label="Your workouts">{library.map(w => <option key={w.id} value={`saved:${w.id}`}>{w.name}</option>)}</optgroup>}
+        <optgroup label="RepCount templates">{Object.keys(templates).map(t => <option key={t}>{t}</option>)}</optgroup>
+        <option>Custom</option>
+      </select></label>
+      {library.length === 0 && area === "trainer" && <p className="small-note">Tip: save workouts you use often under <Link href="/trainer?tab=workouts">Workouts</Link> to pick them here.</p>}
       {d.kind !== "Rest day" && <>
         <label><span>Title</span><input value={d.title} onChange={e => update({title: e.target.value})} maxLength={60} required/></label>
-        <div className="rc-day-pair">
-          <label><span>Start time (IST)</span><input type="time" value={d.time} onChange={e => update({time: e.target.value})}/></label>
-          <label><span>Minutes</span><input type="number" min={5} max={240} step={5} value={d.duration} onChange={e => update({duration: e.target.value})}/></label>
-        </div>
-        <label><span>Google Meet link (optional)</span><input type="url" inputMode="url" placeholder="https://meet.google.com/…" value={d.meetingUrl} onChange={e => update({meetingUrl: e.target.value})}/></label>
+        <label><span>About how many minutes</span><input type="number" min={5} max={240} step={5} value={d.duration} onChange={e => update({duration: e.target.value})}/></label>
         <label><span>Exercises · one per line</span><textarea rows={8} value={d.exercises} onChange={e => update({exercises: e.target.value})}/></label>
       </>}
       <div className="rc-day-actions">

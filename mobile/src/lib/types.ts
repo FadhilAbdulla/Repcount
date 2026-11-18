@@ -28,6 +28,9 @@ export type HealthDay = {
   weightKg: number | null;
 };
 
+/** A booked video call with the trainer. Times are ISO instants. */
+export type Session = { id: number; kind: 'intro' | 'weekly' | 'workout'; title: string; startsAt: string; endsAt: string; meetingUrl: string | null; status: string; notes: string | null };
+
 export type Dashboard = {
   today: string;
   weekStart: string;
@@ -42,6 +45,7 @@ export type Dashboard = {
   confirmed: string[];
   messages: Message[];
   health: { days: HealthDay[]; lastSync: string | null };
+  sessions: Session[];
 };
 
 export const moods = ['Low', 'Okay', 'Good', 'Great'] as const;

@@ -2,6 +2,7 @@ import Link from "next/link";
 import {connection} from "next/server";
 import Brand from "../Brand";
 import WhatsAppButton from "../WhatsAppButton";
+import SiteFooter from "../SiteFooter";
 import {getSettings} from "@/lib/store";
 import "../landing-premium.css";
 import "./blog.css";
@@ -25,10 +26,7 @@ export default async function BlogLayout({children}: {children: React.ReactNode}
       </div>
     </header>
     <main id="rc-main" className="rc-blog-main">{children}</main>
-    <footer className="rc-blog-footer">
-      <p>© {new Date().getFullYear()} RepCount · <Link href="/">Home</Link> · <Link href="/blog">Blog</Link> · <Link href="/privacy">Privacy policy</Link></p>
-      <p className="rc-blog-disclaimer">Articles are general information, not medical advice. Talk to a doctor before starting a new exercise or diet plan if you have a health condition.</p>
-    </footer>
+    <SiteFooter topId="rc-main" note="Articles are general information, not medical advice. Talk to a doctor before starting a new exercise or diet plan if you have a health condition."/>
     <WhatsAppButton number={whatsapp}/>
   </div>;
 }

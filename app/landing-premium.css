@@ -71,3 +71,4 @@
 /* The home page header stays pinned while the page scrolls; in-page links land below it. */
 .rc-header{position:sticky;top:0;z-index:50}
 html:has(.rc-site){scroll-padding-top:96px}
+.rc-footer-note{max-width:760px;margin:0 0 22px;font-size:13px;line-height:1.6;color:#7c7b73}

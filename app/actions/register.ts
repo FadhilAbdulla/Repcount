@@ -9,6 +9,7 @@ import * as store from "@/lib/store";
 import {sendLater} from "@/lib/mail";
 import {emails} from "@/lib/emails";
 import {createUser, emailTaken, findUser, listAdmins, initialsOf, loginLimited, recordLoginFailure} from "@/lib/users";
+import {passwordRuleText, validPassword} from "@/lib/passwordRules";
 
 export type RegisterState = {error?: string; values?: Record<string, string>} | undefined;
 export type OnboardingState = {error?: string} | undefined;
@@ -27,7 +28,7 @@ export async function register(_state: RegisterState, formData: FormData): Promi
   if (values.name.length < 2 || values.name.length > 60) return fail("Enter your full name.");
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(values.email) || values.email.length > 254) return fail("Enter a valid email address.");
   if (values.phone && !/^\+?[\d\s()-]{7,20}$/.test(values.phone)) return fail("Enter a phone number with digits only, or leave it blank.");
-  if (password.length < 10 || password.length > 200) return fail("Choose a password of at least 10 characters.");
+  if (!validPassword(password)) return fail(`Choose a password of ${passwordRuleText}.`);
   if (formData.get("adult") !== "on") return fail("RepCount is for adults. Please confirm you’re 18 or over.");
   if (formData.get("privacy") !== "on") return fail("Please accept the privacy policy to create your account.");
 

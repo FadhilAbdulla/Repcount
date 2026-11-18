@@ -1,28 +1,29 @@
 "use client";
 
 import {useTransition, useState} from "react";
-import Link from "next/link";
 import {Icon} from "./Media";
 import {LineChart, palette} from "./Tracker";
 import {activityLabels} from "./StaffApp";
 import {assignTrainer, sendResetLink, setAccountActive, setClientCancelled, verifyPayment} from "./actions/data";
-import {StaffConversation} from "./Conversation";
 import type {ClientDetail as Detail, MemberLog} from "@/lib/store";
 import type {HealthSummary} from "@/lib/health";
 import {DeleteAccount, MemberLogEditor, MembershipEditor} from "./AdminEditors";
-import {StatusPill} from "./StaffApp";
+import {StatusPill} from "./Pills";
 import {PAYMENTS_ENABLED} from "@/lib/features";
 import {ageFrom, memberCode} from "@/lib/programme";
 import {dayNames, formatTime, type WeekPlan} from "@/lib/schedule";
 import type {NutritionPlan} from "@/lib/nutritionPlan";
+import type {SavedWorkout} from "@/lib/workoutLibrary";
 import {DayEditor, WeekOverview} from "./ScheduleEditor";
 import {NutritionPlanEditor, SessionChecklist} from "./TrainerTools";
 
 /** What the assigned trainer can manage on a member's page: weekly workouts, nutrition and session completion. */
-export type Coaching = {weeks: {start: string; label: string}[]; plans: Record<string, WeekPlan | null>; nutrition: NutritionPlan | null; confirmed: string[]; today: string; week: string; day?: number};
+export type Coaching = {weeks: {start: string; label: string}[]; plans: Record<string, WeekPlan | null>; nutrition: NutritionPlan | null; confirmed: string[]; today: string; week: string; day?: number;
+  /** The trainer's saved workouts, offered in the day editor. */
+  saved?: SavedWorkout[]};
 
 /* A trainer's member page is split into sections, each at its own URL under /trainer/clients/[id]. */
-export type MemberSection = "overview" | "workouts" | "nutrition" | "progress";
+export type MemberSection = "overview" | "workouts" | "nutrition" | "sessions" | "messages" | "calendar" | "progress";
 
 const formatDate = (iso: string | null) => iso ? new Date(`${iso.length === 10 ? iso + "T00:00:00Z" : iso.replace(" ", "T") + "Z"}`).toLocaleDateString("en-GB", {day: "numeric", month: "short", year: "numeric", timeZone: "UTC"}) : "—";
 
@@ -63,7 +64,7 @@ function PhoneHealth({health, firstName}: {health: HealthSummary; firstName: str
  * The trainer manages coaching; the admin manages coaching too, and can also edit or delete every other record.
  */
 export default function ClientDetail({viewer, section, detail, trainers, coaching, log = null, health = null}: {viewer: "admin" | "trainer"; section?: MemberSection; detail: Detail; trainers: {id: string; name: string}[]; coaching?: Coaching; log?: MemberLog | null; health?: HealthSummary | null}) {
-  const {client: c, state, history, lastSaved, plan, pastWeeks, messages} = detail;
+  const {client: c, state, history, lastSaved, plan, pastWeeks} = detail;
   const admin = viewer === "admin";
   const firstName = c.name.split(" ")[0];
   const [pending, startTransition] = useTransition();
@@ -77,9 +78,7 @@ export default function ClientDetail({viewer, section, detail, trainers, coachin
   const weights = (state?.tracker.weights ?? []).map(p => ({label: shortDate(p.label), value: p.value}));
   const latestWeight = weights.at(-1)?.value;
   const weightChange = latestWeight !== undefined && weights[0] ? Math.round((latestWeight - weights[0].value) * 10) / 10 : null;
-  const base = `/${viewer}/clients/${c.id}`;
   const shows = (s: MemberSection) => !section || section === s;
-  const scheduled = plan?.filter(Boolean).length ?? 0;
 
   return <>
     {notice && <div className={noticeError ? "notice notice-error" : "notice"} role={noticeError ? "alert" : "status"}>{notice}<button onClick={() => setNotice("")} aria-label="Dismiss notification"><Icon name="close" size={18}/></button></div>}
@@ -95,14 +94,6 @@ export default function ClientDetail({viewer, section, detail, trainers, coachin
     {coaching && <>
       <SessionChecklist clientId={c.id} firstName={firstName} plan={plan} weekStart={coaching.weeks[0].start} today={coaching.today}
         memberDone={state?.workout.completedDays ?? []} confirmed={coaching.confirmed} pending={pending} run={run}/>
-      <div className="two-grid equal rc-detail-grid">
-        <section className="card rc-plan-summary"><div className="section-top"><h2>Workout plan</h2><span className="pill">{plan ? `${scheduled} THIS WEEK` : "NOT SCHEDULED"}</span></div>
-          <p className="small-note">{plan ? `${scheduled} workout${scheduled === 1 ? "" : "s"} planned this week${plan.some(w => w?.meetingUrl) ? ", with live-session links" : ""}.` : `${firstName}’s week isn’t planned yet.`} Check-in call link: {c.meetingUrl ? "set" : "not set"}.</p>
-          <Link className="button outline" href={`${base}/workouts`}>{plan ? "Open workout plan" : "Plan this week"} <span><Icon name="arrow" size={16}/></span></Link></section>
-        <section className="card rc-plan-summary"><div className="section-top"><h2>Nutrition plan</h2><span className="pill">{coaching.nutrition ? "SHARED" : "NOT SET"}</span></div>
-          <p className="small-note">{coaching.nutrition ? [coaching.nutrition.calories && `${coaching.nutrition.calories} kcal`, coaching.nutrition.protein && `${coaching.nutrition.protein} g protein`, `${coaching.nutrition.meals.length} meal${coaching.nutrition.meals.length === 1 ? "" : "s"}`].filter(Boolean).join(" · ") : `No nutrition plan for ${firstName} yet.`}</p>
-          <Link className="button outline" href={`${base}/nutrition`}>{coaching.nutrition ? "Open nutrition plan" : "Write a nutrition plan"} <span><Icon name="arrow" size={16}/></span></Link></section>
-      </div>
       <div className="section-heading"><h2>Profile</h2></div>
     </>}
 
@@ -127,11 +118,8 @@ export default function ClientDetail({viewer, section, detail, trainers, coachin
         <div><dt>Trainer</dt><dd>{admin ? <select aria-label={`Trainer for ${c.name}`} value={c.trainerId ?? ""} disabled={pending} onChange={e => {const trainerId = e.target.value; run(() => assignTrainer(c.id, trainerId));}}><option value="">Unassigned</option>{trainers.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}</select> : c.trainer}</dd></div>
         <div><dt>Trains</dt><dd>{c.intake ? `${c.intake.place} · ${c.intake.days}` : "—"}</dd></div>
         <div><dt>Latest check-in</dt><dd>{c.checkinNote ? `“${c.checkinNote}”` : "—"}</dd></div>
-        <div><dt>Check-in call link</dt><dd>{c.meetingUrl ? <a href={c.meetingUrl} target="_blank" rel="noopener noreferrer">{c.meetingUrl}</a> : "Not set by trainer"}</dd></div>
       </dl></section>
     </div>
-
-    <StaffConversation clientId={c.id} firstName={firstName} messages={messages} canReply={c.userId !== null} canDelete={admin} pending={pending} run={run}/>
 
     {admin && <section className="card rc-danger-zone"><h2>Delete client</h2>
       <p>Permanently removes {firstName} and everything stored about them. To pause access instead, use Deactivate under Contact &amp; account.</p>
@@ -142,7 +130,7 @@ export default function ClientDetail({viewer, section, detail, trainers, coachin
 
     {section === "workouts" && coaching && (coaching.day === undefined
       ? <WeekOverview area={viewer} client={c} weeks={coaching.weeks} week={coaching.week} plans={coaching.plans} today={coaching.today} pending={pending} run={run}/>
-      : <DayEditor area={viewer} key={`${coaching.week}-${coaching.day}`} client={c} weeks={coaching.weeks} week={coaching.week} day={coaching.day} plans={coaching.plans} pending={pending} run={run}/>)}
+      : <DayEditor area={viewer} key={`${coaching.week}-${coaching.day}`} client={c} weeks={coaching.weeks} week={coaching.week} day={coaching.day} plans={coaching.plans} saved={coaching.saved} pending={pending} run={run}/>)}
 
     {section === "nutrition" && coaching && <>
       <NutritionPlanEditor clientId={c.id} firstName={firstName} plan={coaching.nutrition} pending={pending} run={run}/>

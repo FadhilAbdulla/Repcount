@@ -7,11 +7,13 @@ import {Icon} from "./Media";
 import {AuthShell} from "./Login";
 import "./register.css";
 import {requestPasswordReset, resetPassword, type ForgotState, type ResetState} from "./actions/password";
+import {PASSWORD_MIN} from "@/lib/passwordRules";
+import {SubmitButton} from "./Buttons";
 
 /** /forgot-password: asks for the account email and sends a reset link. */
 export function ForgotPassword({mailReady}: {mailReady: boolean}) {
   const heading = useRef<HTMLHeadingElement>(null);
-  const [state, action, pending] = useActionState<ForgotState, FormData>(requestPasswordReset, undefined);
+  const [state, action] = useActionState<ForgotState, FormData>(requestPasswordReset, undefined);
   useEffect(() => { heading.current?.focus({preventScroll: true}); }, [state?.sent]);
   return <AuthShell>
     <h1 id="auth-heading" tabIndex={-1} ref={heading}>{state?.sent ? <>Check your <em>inbox.</em></> : <>Reset your <em>password.</em></>}</h1>
@@ -22,7 +24,7 @@ export function ForgotPassword({mailReady}: {mailReady: boolean}) {
         <form className="rc-login-form" action={action} noValidate>
           {state?.error && <div className="rc-login-error" role="alert">{state.error}</div>}
           <label><span>Email</span><input name="email" type="email" placeholder="you@example.com" autoComplete="username" required defaultValue={state?.email}/></label>
-          <button type="submit" className="rc-login-submit" disabled={pending}>{pending ? "Sending…" : "Send reset link"} <Icon name="arrow" size={18}/></button>
+          <SubmitButton className="rc-login-submit" pendingLabel="Sending…">Send reset link <Icon name="arrow" size={18}/></SubmitButton>
         </form>
       </>}
     <p className="rc-login-switch">Remembered it? <Link href="/login">Sign in →</Link></p>
@@ -32,7 +34,7 @@ export function ForgotPassword({mailReady}: {mailReady: boolean}) {
 /** /reset-password?token=…: choose a new password from a reset or invitation link. */
 export function ResetPassword({token, valid, invite, firstName}: {token: string; valid: boolean; invite: boolean; firstName?: string}) {
   const heading = useRef<HTMLHeadingElement>(null);
-  const [state, action, pending] = useActionState<ResetState, FormData>(resetPassword, undefined);
+  const [state, action] = useActionState<ResetState, FormData>(resetPassword, undefined);
   useEffect(() => { heading.current?.focus({preventScroll: true}); }, []);
   if (!valid) return <AuthShell>
     <h1 id="auth-heading" tabIndex={-1} ref={heading}>This link has <em>expired.</em></h1>
@@ -45,10 +47,10 @@ export function ResetPassword({token, valid, invite, firstName}: {token: string;
     <form className="rc-login-form rc-register-form" action={action} noValidate>
       {state?.error && <div className="rc-login-error" role="alert">{state.error}</div>}
       <input type="hidden" name="token" value={token}/>
-      <label><span>New password</span><PasswordInput name="password" autoComplete="new-password" placeholder="10+ characters" minLength={10} required/></label>
-      <label><span>Confirm password</span><PasswordInput name="confirm" autoComplete="new-password" minLength={10} required/></label>
+      <label><span>New password</span><PasswordInput name="password" autoComplete="new-password" placeholder={`${PASSWORD_MIN}+ characters`} isNew required/></label>
+      <label><span>Confirm password</span><PasswordInput name="confirm" isNew required/></label>
       <label className="rc-register-consent"><input type="checkbox" name="privacy" required/><span>I’ve read and accept the <Link href="/privacy" target="_blank">privacy policy</Link>.</span></label>
-      <button type="submit" className="rc-login-submit" disabled={pending}>{pending ? "Saving…" : "Save password"} <Icon name="arrow" size={18}/></button>
+      <SubmitButton className="rc-login-submit" pendingLabel="Saving…">Save password <Icon name="arrow" size={18}/></SubmitButton>
     </form>
   </AuthShell>;
 }

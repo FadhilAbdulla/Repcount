@@ -116,7 +116,9 @@
 @media(max-width:700px){.rc-staff .rc-member-tabs a{padding:0 12px;font-size:12px}}
 
 /* Workout plan: week tabs, seven day cards, and a single-day editor page. */
-.rc-staff .rc-week-tabs{display:grid;grid-template-columns:repeat(4,minmax(150px,1fr));gap:10px;margin-bottom:20px;overflow-x:auto}
+.rc-staff .rc-week-tabs{display:grid;grid-template-columns:repeat(4,minmax(150px,1fr));gap:10px;margin:-6px -4px 8px;padding:6px 4px 14px;overflow-x:auto}
+.rc-staff .rc-schedule+.rc-detail-grid{margin-top:22px}
+@media(min-width:701px){.rc-staff main{padding-bottom:64px}}
 .rc-staff .rc-week-tabs a{display:flex;flex-direction:column;gap:3px;padding:12px 14px;border:1px solid #e3ded3;border-radius:12px;background:#fffdf8;text-decoration:none;color:#252822}
 .rc-staff .rc-week-tabs a b{font-size:13px}
 .rc-staff .rc-week-tabs a small{font-size:11px;color:#868279}

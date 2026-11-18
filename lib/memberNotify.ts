@@ -5,15 +5,22 @@ import {sendLater} from "./mail";
 import {emails} from "./emails";
 
 /*
- * The emails a member's own actions send to staff. Used by the mobile API (app/api/mobile). The web server actions in
- * app/actions/data.ts send the same emails with their own copy of these helpers.
+ * Who to email about a client, and the emails a member's own actions send to staff.
+ * Shared by the web server actions (app/actions/*) and the mobile API (app/api/mobile).
  */
-const memberOf = (c: ClientRow) => ({id: c.id, name: c.name, email: c.email});
-const activeAdmins = async () => (await listAdmins()).filter(a => a.active);
+
+/** The member as an email recipient. */
+export const memberOf = (c: ClientRow) => ({id: c.id, name: c.name, email: c.email});
+export const activeAdmins = async () => (await listAdmins()).filter(a => a.active);
+
+/** The client's trainer, if they have an active one. */
+export async function trainerOf(c: ClientRow) {
+  return c.trainerId ? (await listTrainers()).find(t => t.id === c.trainerId && t.active) ?? null : null;
+}
 
 /** Who hears about a member's question or check-in: their trainer, or every admin while they have none. */
-async function coachesOf(c: ClientRow) {
-  const trainer = c.trainerId ? (await listTrainers()).find(t => t.id === c.trainerId && t.active) ?? null : null;
+export async function coachesOf(c: ClientRow) {
+  const trainer = await trainerOf(c);
   return trainer ? {people: [trainer], area: "trainer" as const} : {people: await activeAdmins(), area: "admin" as const};
 }
 

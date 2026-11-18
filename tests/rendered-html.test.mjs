@@ -208,7 +208,7 @@ test('Google sign-in starts with state and PKCE and refuses a forged return', as
  assert.match(forged.headers.get('location') ?? '', /\/login\?error=google_failed$/);
 });
 
-test('a trainer’s schedule and meeting link reach the member’s plan', async () => {
+test('a trainer’s schedule and booked sessions reach the member', async () => {
  await productionHomepage();
  const week = istWeekStart();
  await sql`delete from workout_plans where client_id = 'c-aarav'`;
@@ -216,20 +216,27 @@ test('a trainer’s schedule and meeting link reach the member’s plan', async 
   await sql`insert into workout_plans (client_id, week_start, day, title, exercises, start_time, duration_min, meeting_url, updated_by)
    values ('c-aarav', ${week}, ${day}, 'Lower body strength', ${'Goblet squat · 3 × 10\nGlute bridge · 3 × 12'}, '18:30', 35, 'https://meet.google.com/abc-defg-hij', 'u-trainer-akif')`;
  }
- await sql`update clients set meeting_url = 'https://zoom.us/j/123456' where id = 'c-aarav'`;
+ await sql`delete from sessions where client_id = 'c-aarav'`;
+ await sql`insert into sessions (client_id, kind, title, starts_at, ends_at, meeting_url, created_by)
+  values ('c-aarav', 'weekly', 'Weekly check-in', now() + interval '2 days', now() + interval '2 days 30 minutes', 'https://zoom.us/j/123456', 'u-trainer-akif')`;
  const member = await sessionCookie('u-member-aarav', 'member');
  const plan = await (await visit('/member/plan', member)).text();
  assert.match(readableText(plan), /Lower body strength/);
  assert.match(readableText(plan), /Goblet squat · 3 × 10/);
- assert.match(plan, /href="https:\/\/meet\.google\.com\/abc-defg-hij"/);
- assert.match(await (await visit('/member/profile', member)).text(), /href="https:\/\/zoom\.us\/j\/123456"/);
+ assert.match(readableText(await (await visit('/member/overview', member)).text()), /NEXT SESSION Weekly check-in/);
+ const sessionsPage = readableText(await (await visit('/member/sessions', member)).text());
+ assert.match(sessionsPage, /Upcoming .*Weekly check-in/);
+ assert.match(sessionsPage, /Join opens 15 min before/, 'The join link opens shortly before the start');
  const trainer = readableText(await (await visit('/trainer/clients/c-aarav', await sessionCookie('u-trainer-akif', 'trainer'))).text());
  assert.match(trainer, /Sessions this week/);
- assert.match(trainer, /Workout plan/);
- assert.match(trainer, /nutrition plan/i);
+ assert.match(trainer, /Workout plan Nutrition Sessions Messages Calendar Progress/, 'Each part of the member has its own tab');
+ assert.doesNotMatch(trainer, /Open workout plan|Write a nutrition plan|Open nutrition plan/, 'The overview doesn’t repeat the plan tabs');
  // Workouts, nutrition and progress each have their own page under the member.
  const akif = await sessionCookie('u-trainer-akif', 'trainer');
- assert.match(readableText(await (await visit('/trainer/clients/c-aarav/workouts', akif)).text()), /Weekly check-in call link/);
+ assert.match(readableText(await (await visit('/trainer/clients/c-aarav/workouts', akif)).text()), /Live sessions .*Open Sessions/);
+ assert.match(readableText(await (await visit('/trainer/clients/c-aarav/sessions', akif)).text()), /Weekly check-in .*Book a session/);
+ assert.match(readableText(await (await visit('/trainer/clients/c-aarav/calendar', akif)).text()), /Weekly check-in/);
+ assert.match(readableText(await (await visit('/trainer?tab=sessions', akif)).text()), /Aarav · Weekly check-in/);
  // Each day of the week is edited on its own page; unknown weeks and days are 404s.
  assert.match(readableText(await (await visit(`/trainer/clients/c-aarav/workouts/${week}/monday`, akif)).text()), /Save Monday/);
  assert.equal((await visit(`/trainer/clients/c-aarav/workouts/${week}/funday`, akif)).status, 404);
@@ -375,7 +382,7 @@ test('the admin edits a trainer’s email, title and password; a new password en
  const taken = await callAction('app/actions/data.ts', 'editTrainer', ['u-trainer-2', {name: 'Trainer 2', email: 'trainer@repcount.demo', title: 'Coach', password: ''}], admin, '/admin');
  assert.match(taken.error ?? '', /already signs in with that email/);
  assert.match((await callAction('app/actions/data.ts', 'editTrainer', ['u-trainer-2', {name: 'Trainer 2', email: 'bad', title: '', password: ''}], admin, '/admin')).error ?? '', /valid email/);
- assert.match((await callAction('app/actions/data.ts', 'editTrainer', ['u-trainer-2', {name: 'Trainer 2', email: 'coach2@example.com', title: '', password: 'short'}], admin, '/admin')).error ?? '', /at least 10/);
+ assert.match((await callAction('app/actions/data.ts', 'editTrainer', ['u-trainer-2', {name: 'Trainer 2', email: 'coach2@example.com', title: '', password: 'short'}], admin, '/admin')).error ?? '', /at least 8/);
  const saved = await callAction('app/actions/data.ts', 'editTrainer', ['u-trainer-2', {name: 'Sam Coach', email: 'Coach2@Example.com', title: 'Strength coach', password: 'NewCoach#2026'}], admin, '/admin');
  assert.match(saved.ok ?? JSON.stringify(saved), /details saved/);
  const [row] = await sql`select name, email, title, session_version from users where id = 'u-trainer-2'`;
@@ -502,7 +509,7 @@ test('trainers reply to members’ questions and members see the conversation', 
  const asked = await callAction('app/actions/data.ts', 'askCoach', ['Can I swap squats for lunges?'], aarav, '/member/profile');
  assert.match(asked.ok ?? JSON.stringify(asked), /Profile/);
  const akif = await sessionCookie('u-trainer-akif', 'trainer');
- const staffView = readableText(await (await visit('/trainer/clients/c-aarav', akif)).text());
+ const staffView = readableText(await (await visit('/trainer/clients/c-aarav/messages', akif)).text());
  assert.match(staffView, /Messages with Aarav/);
  assert.match(staffView, /Can I swap squats for lunges\?/);
  assert.match(staffView, /Reply to Aarav/);
@@ -546,18 +553,23 @@ test('the admin plans workouts, call links, sessions and nutrition for any clien
  const saved = await callAction('app/actions/data.ts', 'saveSchedule', ['c-riya', week, plan], admin, `/admin/clients/c-riya/workouts/${week}/monday`);
  assert.match(saved.ok ?? JSON.stringify(saved), /1 workout scheduled/);
  assert.equal((await sql`select count(*)::int as n from workout_plans where client_id = 'c-riya' and week_start = ${week}`)[0].n, 1);
- const link = await callAction('app/actions/data.ts', 'saveMeetingLink', ['c-riya', 'https://zoom.us/j/999'], admin, '/admin/clients/c-riya/workouts');
- assert.match(link.ok ?? JSON.stringify(link), /link saved/);
+ const booking = {kind: 'intro', title: '', date: week, start: '19:00', end: '19:30', meetingUrl: 'https://zoom.us/j/999', notes: ''};
+ assert.match((await callAction('app/actions/sessions.ts', 'saveSession', ['c-riya', {...booking, end: '18:00'}], admin, '/admin/clients/c-riya/sessions')).error ?? '', /end after it starts/);
+ assert.match((await callAction('app/actions/sessions.ts', 'saveSession', ['c-riya', {...booking, meetingUrl: 'zoom.us/j/1'}], admin, '/admin/clients/c-riya/sessions')).error ?? '', /https:\/\//);
+ const booked = await callAction('app/actions/sessions.ts', 'saveSession', ['c-riya', booking], admin, '/admin/clients/c-riya/sessions');
+ assert.match(booked.ok ?? JSON.stringify(booked), /Session booked/);
  const nutrition = await callAction('app/actions/data.ts', 'saveNutritionPlan', ['c-riya', {calories: 1800, protein: 90, meals: [{name: 'Breakfast', detail: 'Oats and fruit'}], notes: ''}], admin, '/admin/clients/c-riya/nutrition');
  assert.match(nutrition.ok ?? JSON.stringify(nutrition), /Nutrition plan saved/);
  const session = await callAction('app/actions/data.ts', 'confirmSession', ['c-riya', week, true], admin, '/admin/clients/c-riya');
  assert.match(session.ok ?? JSON.stringify(session), /marked completed/);
- const [riya] = await sql`select meeting_url, (select count(*)::int from nutrition_plans where client_id = 'c-riya') as plans, (select count(*)::int from session_confirmations where client_id = 'c-riya') as sessions from clients where id = 'c-riya'`;
- assert.deepEqual({...riya}, {meeting_url: 'https://zoom.us/j/999', plans: 1, sessions: 1});
+ const [riya] = await sql`select (select meeting_url from sessions where client_id = 'c-riya') as meeting_url, (select title from sessions where client_id = 'c-riya') as title, (select count(*)::int from nutrition_plans where client_id = 'c-riya') as plans, (select count(*)::int from session_confirmations where client_id = 'c-riya') as sessions`;
+ assert.deepEqual({...riya}, {meeting_url: 'https://zoom.us/j/999', title: 'Introduction call', plans: 1, sessions: 1});
  const overview = readableText(await (await visit('/admin/clients/c-riya', admin)).text());
- for (const tab of ['Workout plan', 'Nutrition', 'Progress & history']) assert.ok(overview.includes(tab.replace('&', '&amp;')) || overview.includes(tab), tab);
+ for (const tab of ['Workout plan', 'Nutrition', 'Sessions', 'Messages', 'Calendar', 'Progress & history']) assert.ok(overview.includes(tab.replace('&', '&amp;')) || overview.includes(tab), tab);
  // A trainer still can't touch someone else's client.
- assert.match((await callAction('app/actions/data.ts', 'saveMeetingLink', ['c-riya', 'https://zoom.us/j/1'], await sessionCookie('u-trainer-akif', 'trainer'), '/trainer/clients/c-aarav/workouts')).error ?? '', /isn’t assigned to you/);
+ assert.match((await callAction('app/actions/sessions.ts', 'saveSession', ['c-riya', {kind: 'weekly', title: '', date: week, start: '10:00', end: '10:30', meetingUrl: '', notes: ''}], await sessionCookie('u-trainer-akif', 'trainer'), '/trainer/clients/c-aarav/sessions')).error ?? '', /isn’t assigned to you/);
+ const [riyaSession] = await sql`select id from sessions where client_id = 'c-riya'`;
+ assert.match((await callAction('app/actions/sessions.ts', 'moveSession', [Number(riyaSession.id), week, '20:00'], await sessionCookie('u-trainer-akif', 'trainer'), '/trainer')).error ?? '', /isn’t assigned to you/);
 });
 
 test('the admin edits membership dates; payments stay locked until phase 2', async () => {
@@ -743,7 +755,7 @@ test('an admin changes their own password in Settings', async () => {
  assert.match((await visit('/admin', owner)).headers.get('location') ?? '', /\/login$/);
  const fresh = await currentCookie(id, 'admin');
  assert.match((await callAction('app/actions/data.ts', 'changeMyPassword', [{current: '', next: 'Another#20266', confirm: 'Another#20266'}], fresh, '/admin')).error ?? '', /current password is wrong/);
- assert.match((await callAction('app/actions/data.ts', 'changeMyPassword', [{current: 'OwnerPass#2026', next: 'Root@123', confirm: 'Root@123'}], fresh, '/admin')).error ?? '', /at least 10/);
+ assert.match((await callAction('app/actions/data.ts', 'changeMyPassword', [{current: 'OwnerPass#2026', next: 'Root@12', confirm: 'Root@12'}], fresh, '/admin')).error ?? '', /at least 8/);
  assert.match((await callAction('app/actions/data.ts', 'changeMyPassword', [{current: 'OwnerPass#2026', next: 'Another#20266', confirm: 'Another#2027'}], fresh, '/admin')).error ?? '', /don’t match/);
  const changed = await callAction('app/actions/data.ts', 'changeMyPassword', [{current: 'OwnerPass#2026', next: 'Another#20266', confirm: 'Another#20266'}], fresh, '/admin');
  assert.match(changed.ok ?? JSON.stringify(changed), /Password changed/);
@@ -934,4 +946,69 @@ test('the admin sets a client’s status to unassigned, assigned or cancelled on
  assert.ok(options.length >= 3, 'Each active trainer is offered under “Assigned to”');
  assert.match(select, /<optgroup label="Assigned to">/);
  assert.doesNotMatch(markupOnly(html), /Payment review|aria-label="Stage for/, 'The old stages are not offered');
+});
+
+test('booking a session emails the member a calendar invite with the join link', async () => {
+ const akif = await currentCookie('u-trainer-akif', 'trainer');
+ await callAction('app/actions/data.ts', 'saveEmailSettings', [{apiKey: 're_test_key_123456', from: 'RepCount <hello@example.com>'}], await sessionCookie('u-admin', 'admin'), '/admin');
+ const date = new Date(Date.now() + 3 * 864e5 + 5.5 * 36e5).toISOString().slice(0, 10);
+ const booked = await callAction('app/actions/sessions.ts', 'saveSession', ['c-aarav', {kind: 'workout', title: 'Live strength session', date, start: '07:00', end: '07:45', meetingUrl: 'https://meet.google.com/xyz-abcd-efg', notes: 'Bring a mat'}], akif, '/trainer/clients/c-aarav/sessions');
+ assert.match(booked.ok ?? JSON.stringify(booked), /Session booked/);
+ const email = await waitFor(() => mailbox.find(m => m.to[0] === 'member@repcount.demo' && /Live strength session is booked/.test(m.subject)), 'session email');
+ assert.match(email.text, /Join here at the time: https:\/\/meet\.google\.com\/xyz-abcd-efg/);
+ const invite = email.attachments?.find(a => a.filename === 'invite.ics');
+ assert.ok(invite, 'A calendar invite is attached');
+ const ics = Buffer.from(invite.content, 'base64').toString();
+ assert.match(ics, /BEGIN:VCALENDAR[\s\S]*METHOD:REQUEST[\s\S]*SUMMARY:Live strength session · RepCount/);
+ assert.match(ics, new RegExp(`DTSTART:${date.replace(/-/g, '')}T013000Z`), '07:00 IST is 01:30 UTC');
+ assert.ok(!mailbox.some(m => m.to[0] === 'trainer@repcount.demo' && /Live strength session/.test(m.subject)), 'The trainer who booked it isn’t emailed');
+
+ // Moving it on the calendar keeps the length and emails an update for the same event.
+ const [row] = await sql`select id from sessions where title = 'Live strength session'`;
+ const later = new Date(Date.parse(`${date}T00:00:00Z`) + 864e5).toISOString().slice(0, 10);
+ assert.match((await callAction('app/actions/sessions.ts', 'moveSession', [Number(row.id), later, '07:00'], akif, '/trainer')).ok ?? '', /Session moved/);
+ const [moved] = await sql`select extract(epoch from ends_at - starts_at)::int as seconds from sessions where id = ${row.id}`;
+ assert.equal(moved.seconds, 45 * 60);
+ await waitFor(() => mailbox.find(m => m.to[0] === 'member@repcount.demo' && /Live strength session has moved/.test(m.subject)), 'moved email');
+ assert.match((await callAction('app/actions/sessions.ts', 'setSessionStatus', [Number(row.id), 'cancelled'], akif, '/trainer')).ok ?? '', /cancelled/);
+ const cancel = await waitFor(() => mailbox.find(m => m.to[0] === 'member@repcount.demo' && /is cancelled/.test(m.subject)), 'cancel email');
+ assert.match(Buffer.from(cancel.attachments[0].content, 'base64').toString(), /METHOD:CANCEL/);
+});
+
+test('trainers keep their own list of workouts and use them when planning a day', async () => {
+ const akif = await currentCookie('u-trainer-akif', 'trainer');
+ const save = (input, cookie = akif) => callAction('app/actions/workouts.ts', 'saveWorkout', [input], cookie, '/trainer?tab=workouts');
+ assert.match((await save({name: 'Lower body A', exercises: ''})).error ?? '', /at least one exercise/);
+ assert.match((await save({name: 'Lower body A', exercises: 'Goblet squat · 3 × 10\n\nGlute bridge · 3 × 12'})).ok ?? '', /added/);
+ assert.match((await save({name: 'Lower body A', exercises: 'Lunge'})).error ?? '', /already have/);
+ const [w] = await sql`select id, exercises from workout_templates where name = 'Lower body A'`;
+ assert.equal(w.exercises, 'Goblet squat · 3 × 10\nGlute bridge · 3 × 12', 'Blank lines are dropped');
+ assert.match(readableText(await (await visit('/trainer?tab=workouts', akif)).text()), /Lower body A 2 exercises/);
+ const dayHtml = await (await visit(`/trainer/clients/c-aarav/workouts/${istWeekStart()}/monday`, akif)).text();
+ assert.match(dayHtml, /<optgroup label="Your workouts"><option value="saved:\d+">Lower body A<\/option>/);
+ assert.doesNotMatch(readableText(dayHtml), /Google Meet link|Start time/, 'Times and links are booked as sessions, not on the workout');
+ const other = await currentCookie('u-trainer-2', 'trainer');
+ assert.match((await callAction('app/actions/workouts.ts', 'deleteWorkout', [Number(w.id)], other, '/trainer')).error ?? '', /no longer exists/, 'Only the owner can delete it');
+ assert.match((await callAction('app/actions/workouts.ts', 'deleteWorkout', [Number(w.id)], akif, '/trainer')).ok ?? '', /deleted/);
+});
+
+test('members see Sessions, a locked Growth page and a phone menu with More', async () => {
+ const member = await currentCookie('u-member-aarav', 'member');
+ const growth = await (await visit('/member/growth', member)).text();
+ assert.match(readableText(growth), /COMING SOON .*Your growth, from your phone and band/);
+ assert.match(growth, /class="rc-nav-bar"/);
+ assert.match(readableText(growth), /More/, 'Pages that don’t fit the phone bar are under More');
+ assert.equal((await visit('/member/nowhere', member)).status, 404);
+});
+
+test('llms.txt and the sitemap describe the site and list every article', async () => {
+ const llms = await visit('/llms.txt');
+ assert.equal(llms.status, 200);
+ assert.match(llms.headers.get('content-type') ?? '', /text\/plain/);
+ const text = await llms.text();
+ assert.match(text, /^# RepCount\n\n> Online personal training in India/);
+ const [post] = await sql`select slug, title from posts where published limit 1`;
+ if (post) assert.ok(text.includes(`/blog/${post.slug}`) && text.includes(post.title), 'Articles are listed');
+ assert.match(await (await visit('/sitemap.xml')).text(), /\/register<\/loc>/);
+ assert.match(await productionHomepage(), /"@type":"Organization"/, 'The homepage describes RepCount for search engines');
 });

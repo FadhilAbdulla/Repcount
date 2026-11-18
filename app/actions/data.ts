@@ -6,7 +6,7 @@ import {requireRole, requireStaff, startSession} from "@/lib/dal";
 import {istToday} from "@/lib/dates";
 import * as store from "@/lib/store";
 import {changeOwnPassword, clearLoginFailures, createUser, emailTaken, loginLimited, recordLoginFailure, emailTakenByOther, findUser, initialsOf, listAdmins, listTrainers, setUserActive, updateStaffUser, updateTrainer} from "@/lib/users";
-import {cleanMeetingUrl, planningWeeks, sanitizeWeekPlan} from "@/lib/schedule";
+import {planningWeeks, sanitizeWeekPlan} from "@/lib/schedule";
 import {sanitizeNutritionPlan} from "@/lib/nutritionPlan";
 import {genders, places, rhythms} from "@/lib/programme";
 import {moods} from "@/lib/memberState";
@@ -15,23 +15,15 @@ import {sendPasswordLink} from "@/lib/passwordTokens";
 import {mailStatus, saveMailSettings, sendEmail, sendLater} from "@/lib/mail";
 import {emails} from "@/lib/emails";
 import {PAYMENTS_ENABLED} from "@/lib/features";
+import {coachAccess, refreshAll, type Result} from "@/lib/access";
+import {activeAdmins, coachesOf, memberOf} from "@/lib/memberNotify";
 import * as blog from "@/lib/blog";
+import {passwordRuleText, validPassword} from "@/lib/passwordRules";
 
-type Result = {ok?: string; error?: string};
 const validEmail = (email: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) && email.length <= 254;
 
 /* ---------- Email notifications ---------- */
 
-const memberOf = (c: store.ClientRow) => ({id: c.id, name: c.name, email: c.email});
-const activeAdmins = async () => (await listAdmins()).filter(a => a.active);
-async function trainerOf(c: store.ClientRow) {
-  return c.trainerId ? (await listTrainers()).find(t => t.id === c.trainerId && t.active) ?? null : null;
-}
-/** Who hears about a member's question or check-in: their trainer, or every admin while they have none. */
-async function coachesOf(c: store.ClientRow) {
-  const trainer = await trainerOf(c);
-  return trainer ? {people: [trainer], area: "trainer" as const} : {people: await activeAdmins(), area: "admin" as const};
-}
 const weekLabel = (weekStart: string) => `the week of ${new Date(`${weekStart}T00:00:00Z`).toLocaleDateString("en-GB", {day: "numeric", month: "long", timeZone: "UTC"})}`;
 
 /** The member's app autosaves here. A stale save (the admin corrected the log since the app loaded) returns {stale: true}. */
@@ -46,21 +38,6 @@ export async function saveProgress(input: unknown, revision?: number) {
     }
   }
   return {stale};
-}
-
-/** Coaching data (workouts, call links, session completions, nutrition) is managed by the client's trainer or the admin. */
-async function coachAccess(clientId: string) {
-  const user = await requireStaff();
-  const client = await store.getClient(clientId);
-  if (!client || (user.role === "trainer" && client.trainerId !== user.id)) return {error: "That client isn’t assigned to you."};
-  return {user, client};
-}
-
-/** Revalidates every area that shows client data. */
-function refreshAll() {
-  revalidatePath("/admin", "layout");
-  revalidatePath("/trainer", "layout");
-  revalidatePath("/member", "layout");
 }
 
 /** A member's question for their trainer; staff see it on the client page. */
@@ -207,7 +184,7 @@ export async function addTrainer(input: {name: string; email: string; title: str
   if (name.length < 2 || name.length > 40) return {error: "Enter the trainer’s name (2–40 characters)."};
   if (!validEmail(email)) return {error: "Enter a valid email address."};
   if (title.length > 40) return {error: "Keep the role title under 40 characters."};
-  if (input.password && (input.password.length < 10 || input.password.length > 200)) return {error: "A password needs at least 10 characters, or leave it blank for Google sign-in only."};
+  if (input.password && !validPassword(input.password)) return {error: `A password needs ${passwordRuleText}, or leave it blank for Google sign-in only.`};
   if (await emailTaken(email)) return {error: "A user with that email already exists."};
   const id = await createUser({role: "trainer", name, email, title, password: input.password || null});
   await store.audit(user.id, "add_trainer", `${name} · ${email}`, id);
@@ -224,7 +201,7 @@ export async function editTrainer(id: string, input: {name: string; email: strin
   if (name.length < 2 || name.length > 40) return {error: "Enter the trainer’s name (2–40 characters)."};
   if (!validEmail(email)) return {error: "Enter a valid email address."};
   if (title.length > 40) return {error: "Keep the role title under 40 characters."};
-  if (password && (password.length < 10 || password.length > 200)) return {error: "A new password needs at least 10 characters, or leave it blank to keep the current one."};
+  if (password && !validPassword(password)) return {error: `A new password needs ${passwordRuleText}, or leave it blank to keep the current one.`};
   if (await emailTakenByOther(email, id)) return {error: "Another user already signs in with that email."};
   const updated = await updateTrainer(id, {name, email, title, password: password || null});
   if (!updated) return {error: "That trainer no longer exists."};
@@ -294,7 +271,7 @@ export async function addClient(input: {name: string; email: string; phone: stri
   if (!validEmail(email)) return {error: "Enter a valid email address."};
   if (phone && !/^\+?[\d\s()-]{7,20}$/.test(phone)) return {error: "Enter a phone number with digits only, or leave it blank."};
   if (goal.length > 60) return {error: "Keep the goal under 60 characters."};
-  if (input.password && (input.password.length < 10 || input.password.length > 200)) return {error: "A password needs at least 10 characters, or leave it blank for Google sign-in only."};
+  if (input.password && !validPassword(input.password)) return {error: `A password needs ${passwordRuleText}, or leave it blank for Google sign-in only.`};
   const trainer = input.trainerId ? (await listTrainers()).find(t => t.id === input.trainerId && t.active) : null;
   if (input.trainerId && !trainer) return {error: "Choose an active trainer."};
   if (await emailTaken(email)) return {error: "A user with that email already exists."};
@@ -338,20 +315,6 @@ export async function saveSchedule(clientId: string, weekStart: string, input: u
   revalidatePath("/trainer", "layout");
   revalidatePath("/member", "layout");
   return {ok: `${client.name}’s week of ${weekStart} saved — ${count} workout${count === 1 ? "" : "s"} scheduled.`};
-}
-
-export async function saveMeetingLink(clientId: string, url: string): Promise<Result> {
-  const access = await coachAccess(clientId);
-  if ("error" in access) return access;
-  const {user, client} = access;
-  const cleaned = cleanMeetingUrl(url);
-  if (cleaned === "invalid") return {error: "Paste a full meeting link starting with https:// (Google Meet, Zoom or Teams)."};
-  await store.setMeetingUrl(clientId, cleaned);
-  if (cleaned && cleaned !== client.meetingUrl) sendLater(emails.meetingLink(memberOf(client), user.name));
-  await store.audit(user.id, "set_meeting_link", `${client.name} · ${cleaned ? "check-in call link updated" : "check-in call link removed"}`, clientId);
-  revalidatePath("/trainer", "layout");
-  revalidatePath("/member", "layout");
-  return {ok: cleaned ? `Check-in call link saved — ${client.name} can now join from their app.` : `Check-in call link removed — ${client.name}`};
 }
 
 /** The trainer confirms (or un-confirms) that a client's session happened. Only this week's days up to today can be confirmed. */
@@ -509,7 +472,7 @@ export async function addAdmin(input: {name: string; email: string; password: st
   const password = String(input.password ?? "");
   if (name.length < 2 || name.length > 40) return {error: "Enter the admin’s name (2–40 characters)."};
   if (!validEmail(email)) return {error: "Enter a valid email address."};
-  if (password && (password.length < 10 || password.length > 200)) return {error: "A password needs at least 10 characters, or leave it blank to send an invitation."};
+  if (password && !validPassword(password)) return {error: `A password needs ${passwordRuleText}, or leave it blank to send an invitation.`};
   if (await emailTaken(email)) return {error: "A user with that email already exists."};
   const id = await createUser({role: "admin", name, email, password: password || null});
   await store.audit(user.id, "add_admin", `${name} · ${email}`, id);
@@ -525,7 +488,7 @@ export async function changeMyPassword(input: {current: string; next: string; co
   const user = await requireRole("admin");
   const current = String(input.current ?? "");
   const next = String(input.next ?? "");
-  if (next.length < 10 || next.length > 200) return {error: "The new password needs at least 10 characters."};
+  if (!validPassword(next)) return {error: `The new password needs ${passwordRuleText}.`};
   if (next !== String(input.confirm ?? "")) return {error: "The two new passwords don’t match."};
   if (current && next === current) return {error: "Choose a password different from the current one."};
   const key = `change-password:${user.id}`;
@@ -549,7 +512,7 @@ export async function editAdmin(id: string, input: {name: string; email: string;
   const password = String(input.password ?? "");
   if (name.length < 2 || name.length > 40) return {error: "Enter a name (2–40 characters)."};
   if (!validEmail(email)) return {error: "Enter a valid email address."};
-  if (password && (password.length < 10 || password.length > 200)) return {error: "A new password needs at least 10 characters, or leave it blank to keep the current one."};
+  if (password && !validPassword(password)) return {error: `A new password needs ${passwordRuleText}, or leave it blank to keep the current one.`};
   if (await emailTakenByOther(email, id)) return {error: "Another user already signs in with that email."};
   const updated = await updateStaffUser(id, "admin", {name, email, title: null, password: password || null});
   if (!updated) return {error: "That admin no longer exists."};

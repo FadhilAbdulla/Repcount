@@ -2,9 +2,10 @@ import type { Metadata, Viewport } from "next";
 import {Suspense} from "react";
 import "./globals.css";
 import NavProgress from "./NavProgress";
+import {SITE_URL} from "@/lib/site";
 
 export const metadata: Metadata = {
-  metadataBase: new URL(process.env.SITE_URL ?? "http://localhost:3000"),
+  metadataBase: new URL(SITE_URL),
   title: "RepCount — Stronger, in your own space.",
   description: "Personal home training, weekly trainer support and everyday progress with RepCount’s India pilot.",
   robots: { index: false, follow: false },

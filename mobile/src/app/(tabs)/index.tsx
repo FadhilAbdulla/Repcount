@@ -1,5 +1,6 @@
 import * as WebBrowser from 'expo-web-browser';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import { Linking, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Body, Button, Card, Choice, ErrorNote, Label, Loading, Screen, Stat, Title } from '@/components/ui';
 import { Spacing, useTheme } from '@/constants/theme';
 import { API_URL } from '@/lib/api';
@@ -8,10 +9,20 @@ import { health } from '@/lib/health';
 import { moods } from '@/lib/types';
 
 const fmt = (n: number | null | undefined) => (n === null || n === undefined ? '—' : n.toLocaleString('en-IN'));
+/** "Mon 23 Nov · 6:30 PM" in India time (the pilot runs on IST). */
+const when = (iso: string) => new Date(iso).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' });
 const hours = (min: number | null | undefined) => (min ? `${Math.floor(min / 60)}h ${min % 60}m` : '—');
+
+/** The current time, refreshed every minute (so "Join" appears on time). */
+function useNow() {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => { const id = setInterval(() => setNow(Date.now()), 60_000); return () => clearInterval(id); }, []);
+  return now;
+}
 
 export default function Today() {
   const t = useTheme();
+  const now = useNow();
   const { data, error, loading, reload, update, healthStatus, connectHealth, syncHealth } = useDashboard();
   if (loading && !data) return <Loading />;
   if (!data) return <Screen><ErrorNote message={error ?? 'Couldn’t load your plan.'} onRetry={reload} /></Screen>;
@@ -22,6 +33,7 @@ export default function Today() {
   const phone = data.health.days.find(d => d.day === today) ?? null;
   const connected = !!data.health.lastSync;
   const water = state.tracker.water;
+  const next = (data.sessions ?? []).find(s => s.status === 'scheduled' && Date.parse(s.endsAt) >= now) ?? null;
 
   return (
     <Screen refreshing={loading} onRefresh={reload}>
@@ -33,6 +45,17 @@ export default function Today() {
           <Label>Finish setting up</Label>
           <Body>Answer three quick questions so your trainer can plan your weeks.</Body>
           <Button title="Open on the website" onPress={() => WebBrowser.openBrowserAsync(`${API_URL}/onboarding`)} />
+        </Card>
+      ) : null}
+
+      {next ? (
+        <Card>
+          <Label>Next session</Label>
+          <Body style={{ fontWeight: '700', fontSize: 18 }}>{next.title}</Body>
+          <Body muted>{when(next.startsAt)}{coach ? ` · with ${coach.name}` : ''}</Body>
+          {next.meetingUrl && now >= Date.parse(next.startsAt) - 15 * 60_000
+            ? <Button title="Join now" onPress={() => Linking.openURL(next.meetingUrl!)} />
+            : next.meetingUrl ? <Body muted>The Join button appears 15 minutes before the start.</Body> : null}
         </Card>
       ) : null}
 

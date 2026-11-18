@@ -6,10 +6,12 @@ import {usePathname} from "next/navigation";
 import {Icon} from "./Media";
 import {assignTrainer, setClientCancelled} from "./actions/data";
 import ClientBioEditor from "./ClientBioEditor";
+import {ProfileIncomplete} from "./Pills";
 import {clientStatus, memberCode} from "@/lib/programme";
 import type {ClientRow} from "@/lib/store";
 
-const sections: [string, string, string][] = [["overview", "Overview", ""], ["workouts", "Workout plan", "/workouts"], ["nutrition", "Nutrition", "/nutrition"], ["progress", "Progress & history", "/progress"]];
+const sections: [string, string, string][] = [["overview", "Overview", ""], ["workouts", "Workout plan", "/workouts"], ["nutrition", "Nutrition", "/nutrition"],
+  ["sessions", "Sessions", "/sessions"], ["messages", "Messages", "/messages"], ["calendar", "Calendar", "/calendar"], ["progress", "Progress & history", "/progress"]];
 const formatDate = (iso: string | null) => iso ? new Date(`${iso.slice(0, 10)}T00:00:00Z`).toLocaleDateString("en-GB", {day: "numeric", month: "short", year: "numeric", timeZone: "UTC"}) : "—";
 const CANCELLED = "cancelled";
 
@@ -56,7 +58,7 @@ export default function ClientHeader({viewer, client: c, trainers = []}: {viewer
             <span>{c.goal || "No goal yet"}</span>
             <span>Joined {formatDate(c.joinedOn)}</span>
             <span>{c.trainer === "Unassigned" ? "No trainer yet" : `Trainer: ${c.trainer}`}</span>
-            {!c.intake && <span className="pill rc-pill-warn" title="Completes when the member answers the onboarding questions">Profile incomplete</span>}
+            {!c.intake && <ProfileIncomplete/>}
           </p>
         </div>
       </div>

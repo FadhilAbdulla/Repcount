@@ -1,0 +1,77 @@
+/* Month calendar (app/sessions/MonthCalendar.tsx) and session lists (SessionList.tsx). */
+.rc-cal-head{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.rc-cal-head h2{margin:0}
+.rc-cal-head nav{display:flex;gap:6px}
+.rc-cal-hint{margin:6px 0 0}
+.rc-cal-legend{display:flex;flex-wrap:wrap;gap:8px 16px;list-style:none;padding:0;margin:12px 0 0;font-size:12px;color:#5d6056}
+.rc-cal-legend li{display:flex;align-items:center;gap:6px}
+.rc-cal-legend li::before{content:"";width:10px;height:10px;border-radius:3px;background:var(--tone)}
+.rc-cal-weekdays,.rc-cal-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:6px}
+.rc-cal-weekdays{margin-top:16px}
+.rc-cal-grid{list-style:none;padding:0;margin:4px 0 0}
+.rc-cal-weekday{font-size:11px;font-weight:600;letter-spacing:.6px;text-transform:uppercase;color:#868279;padding:0 4px 2px}
+.rc-cal-day{min-height:104px;padding:6px;border:1px solid #e9e4d9;border-radius:10px;background:#fffdf8;display:flex;flex-direction:column;gap:4px;min-width:0;transition:background-color .15s,border-color .15s}
+.rc-cal-out{background:#f6f3ec;opacity:.65}
+.rc-cal-today{border-color:#e51937;box-shadow:inset 0 0 0 1px #e51937}
+.rc-cal-over{background:#fdeef0;border-color:#e51937}
+.rc-cal-date{font-size:12px;font-weight:700;color:#5d6056}
+.rc-cal-entry{display:flex;gap:4px;align-items:baseline;width:100%;min-width:0;padding:3px 6px;border:0;border-radius:6px;background:color-mix(in srgb,var(--tone) 16%,#fff);color:#252822;font:500 11.5px/1.3 inherit;text-align:left;text-decoration:none;border-left:3px solid var(--tone);cursor:default}
+.rc-cal-entry span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rc-cal-entry time{flex:none;font-weight:700}
+a.rc-cal-entry,button.rc-cal-entry{cursor:pointer}
+a.rc-cal-entry:hover,button.rc-cal-entry:hover{background:color-mix(in srgb,var(--tone) 28%,#fff)}
+.rc-cal-entry[draggable="true"]{cursor:grab}
+.rc-cal-entry:focus-visible{outline:2px solid #252822;outline-offset:1px}
+[data-tone="session"]{--tone:#e51937}
+[data-tone="done"]{--tone:#3a8a43}
+[data-tone="missed"]{--tone:#d18a16}
+[data-tone="cancelled"]{--tone:#a9a69c}
+[data-tone="workout"]{--tone:#6b5fb0}
+[data-tone="meal"]{--tone:#2f8a8a}
+[data-tone="rest"]{--tone:#c9c4b8}
+.rc-cal-entry[data-tone="cancelled"] span{text-decoration:line-through}
+.rc-cal-list{display:none;list-style:none;padding:0;margin:14px 0 0}
+.rc-cal-list>li{display:grid;grid-template-columns:96px 1fr;gap:10px;padding:10px 0;border-top:1px solid #ece6dc}
+.rc-cal-list>li>div{display:flex;flex-direction:column;gap:4px;min-width:0}
+.rc-cal-list b{font-size:13px}
+.rc-cal-list .rc-cal-today{box-shadow:none}
+.rc-cal-list .rc-cal-today b{color:#e51937}
+.rc-cal-empty{color:#868279;font-size:14px}
+.rc-cal-list .rc-cal-entry{font-size:13px;padding:6px 8px}
+@media(max-width:760px){.rc-cal-grid,.rc-cal-weekdays{display:none}.rc-cal-list{display:block}}
+
+/* Session list */
+.rc-session-list{list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:10px}
+.rc-session{display:grid;grid-template-columns:76px 1fr auto;gap:14px;align-items:center;padding:14px;border:1px solid #e9e4d9;border-radius:14px;background:#fffdf8}
+.rc-session-when{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:8px 4px;border-radius:10px;background:#f6f1e8;text-align:center;line-height:1.15}
+.rc-session-when b{font-size:20px}
+.rc-session-when small{font-size:11px;color:#6b6a66;text-transform:uppercase;letter-spacing:.5px}
+.rc-session-body{min-width:0;display:flex;flex-direction:column;gap:3px}
+.rc-session-body h3{margin:0;font-size:16px}
+.rc-session-body p{margin:0;font-size:13.5px;color:#6b6a66}
+.rc-session-actions{display:flex;flex-wrap:wrap;gap:6px;justify-content:flex-end}
+.rc-session[data-status="cancelled"]{opacity:.6}
+.rc-session[data-status="cancelled"] h3{text-decoration:line-through}
+.rc-session-status{font-size:11px;font-weight:700;letter-spacing:.5px;text-transform:uppercase}
+.rc-session-status[data-tone]{color:var(--tone)}
+.rc-session-form .rc-day-pair{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
+@media(max-width:640px){.rc-session{grid-template-columns:60px 1fr}.rc-session-actions{grid-column:1/-1;justify-content:flex-start}.rc-session-form .rc-day-pair{grid-template-columns:1fr 1fr}.rc-session-form .rc-day-pair label:first-child{grid-column:1/-1}}
+
+/* Member: next session card, Growth page. Trainer: saved workouts list. Staff: sessions tab layout. */
+.rc-next-session{display:grid;grid-template-columns:auto 1fr auto;gap:18px;align-items:center;margin:18px 0}
+.rc-next-session h2{margin:4px 0}
+.rc-next-session p{margin:0;color:#6b6a66}
+.rc-next-actions{display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:flex-end}
+.rc-growth-locked{display:flex;flex-direction:column;gap:10px;max-width:760px}
+.rc-growth-locked h2,.rc-growth-locked p{margin:0}
+.rc-growth-list{list-style:none;padding:0;margin:6px 0;display:flex;flex-direction:column;gap:8px}
+.rc-growth-list li{display:flex;align-items:center;gap:10px;color:#454c3e}
+.rc-workout-library{list-style:none;padding:0;margin:14px 0 0;display:flex;flex-direction:column;gap:10px}
+.rc-workout-library li{display:flex;justify-content:space-between;align-items:center;gap:14px;padding:14px;border:1px solid #e9e4d9;border-radius:14px;background:#fffdf8}
+.rc-workout-library h3{margin:0 0 4px;font-size:16px}
+.rc-workout-library p{margin:0;font-size:13.5px;color:#6b6a66}
+.rc-sessions-layout{grid-template-columns:minmax(0,1.5fr) minmax(300px,1fr);align-items:start}
+.rc-sessions-main{display:flex;flex-direction:column;gap:22px;min-width:0}
+.rc-small{min-height:36px;padding:0 14px;font-size:13px}
+@media(max-width:900px){.rc-sessions-layout{grid-template-columns:1fr}}
+@media(max-width:640px){.rc-next-session{grid-template-columns:1fr}.rc-next-actions{justify-content:flex-start}.rc-workout-library li{flex-direction:column;align-items:flex-start}}

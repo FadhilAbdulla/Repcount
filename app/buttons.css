@@ -1,0 +1,6 @@
+/* Spinner shared by SubmitButton, LogoutButton and GoogleButton (app/Buttons.tsx). */
+.rc-spinner{display:inline-block;width:1em;height:1em;flex:none;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:rc-spin .7s linear infinite;vertical-align:-.15em;margin-right:.45em;opacity:.85}
+@keyframes rc-spin{to{transform:rotate(360deg)}}
+@media(prefers-reduced-motion:reduce){.rc-spinner{animation-duration:1.6s}}
+[aria-busy="true"]{cursor:progress}
+a[data-busy]{pointer-events:none;opacity:.8}

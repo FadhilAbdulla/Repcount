@@ -4,6 +4,8 @@ import {requireRole} from "@/lib/dal";
 import {istToday} from "@/lib/dates";
 import {clientByUser, confirmedDays, getMemberDays, getMemberState, getNutritionPlan, getSettings, getMemberRevision, getWeekPlan, leaderboard, listMessages} from "@/lib/store";
 import {findUser} from "@/lib/users";
+import {listSessions} from "@/lib/sessionStore";
+import {clientMonth} from "@/lib/calendarLog";
 import MemberApp from "../MemberApp";
 
 export const metadata: Metadata = {title: "Your plan — RepCount"};
@@ -20,9 +22,10 @@ export default async function MemberLayout({children}: {children: React.ReactNod
   // The 30-day calendar starts on the day they joined, or 29 days ago, whichever is later.
   const monthAgo = new Date(Date.parse(`${day}T00:00:00Z`) - 29 * 86400000).toISOString().slice(0, 10);
   const since = client?.joinedOn && client.joinedOn > monthAgo ? client.joinedOn : monthAgo;
-  const [trainer, schedule, history, nutritionPlan, confirmed, ranking, messages] = await Promise.all([
+  const [trainer, schedule, history, nutritionPlan, confirmed, ranking, messages, sessions, calendar] = await Promise.all([
     client?.trainerId ? findUser(client.trainerId) : null, client ? getWeekPlan(client.id, weekStart) : null, getMemberDays(user.id, since),
     client ? getNutritionPlan(client.id) : null, client ? confirmedDays(client.id, weekStart, day) : [], leaderboard(), client ? listMessages(client.id) : [],
+    client ? listSessions({clientId: client.id}) : [], client ? clientMonth(client.id, day.slice(0, 7)) : null,
   ]);
   const me = ranking.find(r => r.userId === user.id);
   return <>
@@ -32,7 +35,6 @@ export default async function MemberLayout({children}: {children: React.ReactNod
       price={{amount: settings.price, currency: settings.currency}}
       schedule={schedule}
       coach={trainer ? {name: trainer.name, initials: trainer.initials} : {name: "Your trainer", initials: "RC"}}
-      checkinLink={client?.meetingUrl ?? null}
       membership={client?.joinedOn ? {start: formatDay(client.joinedOn, 0), end: formatDay(client.joinedOn, 29), iso: client.joinedOn} : null}
       details={{phone: client?.phone ?? null, goal: client?.goal ?? null, place: client?.intake?.place ?? null, days: client?.intake?.days ?? null, stage: client?.stage ?? null, paid: client?.paid ?? false, bio: client?.bio ?? null, memberNo: client?.memberNo ?? null}}
       nutritionPlan={nutritionPlan}
@@ -43,6 +45,8 @@ export default async function MemberLayout({children}: {children: React.ReactNod
       since={since}
       messages={messages}
       revision={revision}
+      sessions={sessions}
+      calendar={{month: day.slice(0, 7), today: day, entries: calendar?.entries ?? []}}
     />
     {children}
   </>;
