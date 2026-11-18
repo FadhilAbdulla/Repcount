@@ -24,7 +24,7 @@ import "./accessibility-polish.css";
 import "./staff.css";
 import "./admin.css";
 import "./staff-ui.css";
-import {LogoutButton} from "./Buttons";
+import TopBar, {SidebarLogout} from "./TopBar";
 import AppNav from "./AppNav";
 
 export type StaffRole = "trainer" | "admin";
@@ -327,12 +327,10 @@ export default function StaffApp({area: role, user, clients, settings, activity,
       <span className="brand"><Brand/></span>
       <div className="workspace-label">{admin ? "ADMIN" : "TRAINER WORKSPACE"}</div>
       <AppNav items={tabs[role]} active={current ?? ""} onSelect={openTab} label={admin ? "Admin navigation" : "Trainer navigation"}/>
-      <div className="sidebar-bottom"><LogoutButton look="both" className="rc-sidebar-logout"/></div>
+      <SidebarLogout/>
     </aside>
     <div className="content">
-      <header className="topbar"><span className="rc-topbar-status" role="status">{pending ? "Saving…" : ""}</span>
-        <div className="rc-topbar-user"><div><b>{user.name}</b><small>{user.email}</small></div><span className="top-avatar" aria-hidden="true">{user.initials}</span><LogoutButton look="icon" formClassName="rc-topbar-logout"/></div>
-      </header>
+      <TopBar user={user} status={pending ? "Saving…" : ""}/>
       <main id="main">
         {detail ?? <>
         <div className="page-heading rc-page-heading"><div><p className="eyebrow">{admin ? "ADMIN" : `TRAINER · ${user.name.toUpperCase()}`}</p><h1 tabIndex={-1}>{title}</h1><p>{subtitle}</p></div>{headingAction}</div>

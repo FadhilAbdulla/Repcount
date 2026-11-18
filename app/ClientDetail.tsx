@@ -14,13 +14,16 @@ import {ageFrom, memberCode} from "@/lib/programme";
 import {dayNames, formatTime, type WeekPlan} from "@/lib/schedule";
 import type {NutritionPlan} from "@/lib/nutritionPlan";
 import type {SavedWorkout} from "@/lib/workoutLibrary";
+import type {Exercise} from "@/lib/exercises";
 import {DayEditor, WeekOverview} from "./ScheduleEditor";
 import {NutritionPlanEditor, SessionChecklist} from "./TrainerTools";
 
 /** What the assigned trainer can manage on a member's page: weekly workouts, nutrition and session completion. */
 export type Coaching = {weeks: {start: string; label: string}[]; plans: Record<string, WeekPlan | null>; nutrition: NutritionPlan | null; confirmed: string[]; today: string; week: string; day?: number;
   /** The trainer's saved workouts, offered in the day editor. */
-  saved?: SavedWorkout[]};
+  saved?: SavedWorkout[];
+  /** The exercise library for the day editor's workout builder. */
+  exercises?: Exercise[]};
 
 /* A trainer's member page is split into sections, each at its own URL under /trainer/clients/[id]. */
 export type MemberSection = "overview" | "workouts" | "nutrition" | "sessions" | "messages" | "calendar" | "progress";
@@ -131,7 +134,7 @@ export default function ClientDetail({viewer, section, detail, coaching, log = n
 
     {section === "workouts" && coaching && (coaching.day === undefined
       ? <WeekOverview area={viewer} client={c} weeks={coaching.weeks} week={coaching.week} plans={coaching.plans} today={coaching.today} pending={pending} run={run}/>
-      : <DayEditor area={viewer} key={`${coaching.week}-${coaching.day}`} client={c} weeks={coaching.weeks} week={coaching.week} day={coaching.day} plans={coaching.plans} saved={coaching.saved} pending={pending} run={run}/>)}
+      : <DayEditor area={viewer} key={`${coaching.week}-${coaching.day}`} client={c} weeks={coaching.weeks} week={coaching.week} day={coaching.day} plans={coaching.plans} saved={coaching.saved} exercises={coaching.exercises} pending={pending} run={run}/>)}
 
     {section === "nutrition" && coaching && <>
       <NutritionPlanEditor clientId={c.id} firstName={firstName} plan={coaching.nutrition} pending={pending} run={run}/>

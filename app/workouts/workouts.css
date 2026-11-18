@@ -1,0 +1,28 @@
+/* Workout builder (WorkoutBuilder.tsx) and the exercise list on Trainer → Workouts. */
+.rc-builder{display:flex;flex-direction:column;gap:12px}
+.rc-builder-rows{list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:8px}
+.rc-builder-rows li{display:grid;grid-template-columns:26px minmax(0,1fr) 70px 170px auto;gap:10px;align-items:end;padding:10px 12px;border:1px solid #e9e4d9;border-radius:12px;background:#fffdf8}
+.rc-builder-num{align-self:center;width:26px;height:26px;border-radius:50%;display:grid;place-items:center;background:#f3ece6;color:#c4202f;font-size:12px;font-weight:700}
+.rc-builder-name{align-self:center;font-weight:600;min-width:0;overflow:hidden;text-overflow:ellipsis}
+.rc-builder-field{display:flex;flex-direction:column;gap:3px;margin:0}
+.rc-builder-field span{font-size:11px;font-weight:600;color:#7a7f73;text-transform:uppercase;letter-spacing:.4px}
+.rc-builder-field input{width:100%;min-height:38px;padding:0 10px;border:1px solid #ddd7cb;border-radius:9px;font:inherit;background:#fff}
+.rc-builder-tools{display:flex;gap:4px;align-self:center}
+.rc-builder-tools .small-button{min-width:34px;min-height:34px;padding:0 8px;display:grid;place-items:center}
+.rc-builder-search{position:relative}
+.rc-builder-matches{list-style:none;padding:6px;margin:6px 0 0;border:1px solid #e3ded3;border-radius:12px;background:#fff;box-shadow:0 10px 24px #2528221a;display:flex;flex-direction:column;gap:2px;max-height:280px;overflow:auto}
+.rc-builder-matches button{display:flex;align-items:center;gap:8px;width:100%;min-height:40px;padding:0 10px;border:0;border-radius:8px;background:none;font:inherit;text-align:left;cursor:pointer;color:#252822}
+.rc-builder-matches button:hover,.rc-builder-matches button:focus-visible{background:#f6f1e8}
+.rc-builder-matches small{color:#7a7f73}
+.rc-builder-new{color:#c4202f!important;font-weight:600}
+.rc-exercise-chips{list-style:none;padding:0;margin:10px 0 0;display:flex;flex-wrap:wrap;gap:8px}
+.rc-exercise-chips li{display:flex;align-items:center;gap:6px;padding:4px 6px 4px 12px;border:1px solid #e3ded3;border-radius:999px;background:#fffdf8;font-size:14px}
+.rc-exercise-chips button{display:grid;place-items:center;width:26px;height:26px;border:0;border-radius:50%;background:none;cursor:pointer;color:#7a7f73}
+.rc-exercise-chips button:hover{background:#f3ece6;color:#c4202f}
+@media(max-width:700px){
+  .rc-builder-rows li{grid-template-columns:26px 70px minmax(0,1fr) auto;grid-template-areas:"num name name tools" ". sets reps reps"}
+  .rc-builder-num{grid-area:num}.rc-builder-name{grid-area:name}.rc-builder-tools{grid-area:tools}
+  .rc-builder-field:not(.rc-builder-reps){grid-area:sets}.rc-builder-reps{grid-area:reps}
+}
+.rc-day-exercises{display:flex;flex-direction:column;gap:8px}
+.rc-field-label{font-size:13px;font-weight:600;color:#4a4e45}

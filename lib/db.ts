@@ -204,6 +204,14 @@ const schema = `
     updated_at timestamptz not null default now(),
     unique (trainer_id, name)
   );
+  -- The exercise library trainers search when building a workout. trainer_id null = a RepCount exercise for everyone.
+  create table if not exists exercises (
+    id bigserial primary key,
+    trainer_id text references users(id) on delete cascade,
+    name text not null,
+    created_at timestamptz not null default now()
+  );
+  create unique index if not exists exercises_name_idx on exercises (coalesce(trainer_id, ''), lower(name));
   create table if not exists login_attempts (
     key text primary key,
     count integer not null,

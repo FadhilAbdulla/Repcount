@@ -7,18 +7,20 @@ import {saveSchedule} from "./actions/data";
 import {dayNames, daySlugs, templates, type PlannedWorkout, type WeekPlan} from "@/lib/schedule";
 import type {ClientRow} from "@/lib/store";
 import type {SavedWorkout} from "@/lib/workoutLibrary";
+import {formatExercises, parseExercises, type Exercise, type ExerciseItem} from "@/lib/exercises";
+import WorkoutBuilder from "./workouts/WorkoutBuilder";
 import type {Run} from "./useAction";
 type Week = {start: string; label: string};
 /** `kind` is "Rest day", "saved:<id>" for one of the trainer's workouts, or "current" for a planned workout that isn't in their list. */
-type DraftDay = {kind: string; title: string; exercises: string; duration: string};
+type DraftDay = {kind: string; title: string; items: ExerciseItem[]; duration: string};
 
-const rest: DraftDay = {kind: "Rest day", title: "", exercises: "", duration: ""};
+const rest: DraftDay = {kind: "Rest day", title: "", items: [], duration: ""};
 const toDraft = (w: PlannedWorkout | null): DraftDay => w
-  ? {kind: "current", title: w.title, exercises: w.exercises.join("\n"), duration: w.durationMin ? String(w.durationMin) : ""}
+  ? {kind: "current", title: w.title, items: parseExercises(w.exercises), duration: w.durationMin ? String(w.durationMin) : ""}
   : rest;
 // Session times and meeting links live in Sessions now, so a planned day only describes the workout.
 const toWorkout = (d: DraftDay): PlannedWorkout | null => d.kind === "Rest day" ? null : {
-  title: d.title.trim(), exercises: d.exercises.split("\n").map(e => e.trim()).filter(Boolean), time: null,
+  title: d.title.trim(), exercises: formatExercises(d.items), time: null,
   durationMin: d.duration ? Number(d.duration) : null, meetingUrl: null,
 };
 const emptyWeek: WeekPlan = Array(7).fill(null);
@@ -91,10 +93,12 @@ export function WeekOverview({client, weeks, week, plans, today, pending, run, a
 }
 
 /** One day of a member's week on its own page. Saving keeps the rest of the week as it is. */
-export function DayEditor({client, weeks, week, day, plans, saved: library = [], pending, run, area = "trainer"}: {
+export function DayEditor({client, weeks, week, day, plans, saved: library = [], exercises = [], pending, run, area = "trainer"}: {
   area?: "trainer" | "admin"; client: ClientRow; weeks: Week[]; week: string; day: number; plans: Record<string, WeekPlan | null>;
   /** The trainer's saved workouts (Trainer → Workouts). */
-  saved?: SavedWorkout[]; pending: boolean; run: Run;
+  saved?: SavedWorkout[];
+  /** The exercise library (RepCount's plus the trainer's own) for the workout builder. */
+  exercises?: Exercise[]; pending: boolean; run: Run;
 }) {
   const saved = plans[plansKey(client, week)] ?? emptyWeek;
   const [d, setD] = useState<DraftDay>(() => {
@@ -106,7 +110,7 @@ export function DayEditor({client, weeks, week, day, plans, saved: library = [],
   const choose = (kind: string) => {
     if (kind === "Rest day") { setD(rest); return; }
     const w = library.find(x => `saved:${x.id}` === kind);
-    if (w) update({kind, title: w.name, exercises: w.exercises.join("\n"), duration: d.duration || String(templates[w.name]?.durationMin ?? "")});
+    if (w) update({kind, title: w.name, items: parseExercises(w.exercises), duration: d.duration || String(templates[w.name]?.durationMin ?? "")});
   };
   const base = workoutsPath(client.id, area);
   const weekLabel = weeks.find(w => w.start === week)?.label ?? `Week of ${dateOf(week, 0)}`;
@@ -121,11 +125,12 @@ export function DayEditor({client, weeks, week, day, plans, saved: library = [],
         {d.kind === "current" && <option value="current">{d.title}</option>}
         {library.map(w => <option key={w.id} value={`saved:${w.id}`}>{w.name}</option>)}
       </select></label>
-      {area === "trainer" && <p className="small-note">Add, edit or remove workouts in <Link href="/trainer?tab=workouts">Workouts</Link>. You can still adjust the exercises below for this day.</p>}
+      {area === "trainer" && <p className="small-note">Add, edit or remove workouts in <Link href="/trainer?tab=workouts">Workouts</Link>. You can still change the exercises, sets and reps below for this day.</p>}
       {d.kind !== "Rest day" && <>
         <label><span>Title</span><input value={d.title} onChange={e => update({title: e.target.value})} maxLength={60} required/></label>
         <label><span>About how many minutes</span><input type="number" min={5} max={240} step={5} value={d.duration} onChange={e => update({duration: e.target.value})}/></label>
-        <label><span>Exercises · one per line</span><textarea rows={8} value={d.exercises} onChange={e => update({exercises: e.target.value})}/></label>
+        <div className="rc-day-exercises"><span className="rc-field-label">Exercises</span>
+          <WorkoutBuilder items={d.items} onChange={items => update({items})} library={exercises} canAddExercises={area === "trainer"}/></div>
       </>}
       <div className="rc-day-actions">
         <button className="button dark" type="submit" disabled={pending}>{pending ? "Saving…" : `Save ${dayNames[day]}`}</button>

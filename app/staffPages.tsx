@@ -2,6 +2,7 @@ import "server-only";
 import {istToday, monthGrid, addDays} from "@/lib/dates";
 import {listSessions} from "@/lib/sessionStore";
 import {listSavedWorkouts} from "@/lib/workoutLibrary";
+import {listExercises} from "@/lib/exerciseStore";
 import SessionsCalendar from "./trainer/SessionsCalendar";
 import WorkoutLibrary from "./trainer/WorkoutLibrary";
 
@@ -18,6 +19,9 @@ export async function staffPages(area: "trainer" | "admin", userId: string, tab?
       from: `${days[0]}T00:00:00+05:30`, to: `${addDays(days[days.length - 1], 1)}T00:00:00+05:30`});
     return {sessions: <SessionsCalendar area={area} month={shown} today={today} sessions={sessions}/>};
   }
-  if (tab === "workouts" && area === "trainer") return {workouts: <WorkoutLibrary workouts={await listSavedWorkouts(userId)}/>};
+  if (tab === "workouts" && area === "trainer") {
+    const [workouts, exercises] = await Promise.all([listSavedWorkouts(userId), listExercises(userId)]);
+    return {workouts: <WorkoutLibrary workouts={workouts} exercises={exercises}/>};
+  }
   return {};
 }

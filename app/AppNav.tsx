@@ -37,7 +37,7 @@ export default function AppNav({items, active, onSelect, label, primary = 4, loc
   const button = ([key, icon, full, short]: NavItem, variant: "side" | "bar" | "sheet") =>
     <button key={key} type="button" title={full} className={`nav${active === key ? " active" : ""}`} aria-current={active === key ? "page" : undefined} onClick={() => pick(key)}>
       <span aria-hidden="true"><Icon name={locked.includes(key) ? "lock" : icon} size={20}/></span>
-      <span className="nav-label">{variant === "bar" ? short : full}</span>
+      {variant === "side" ? <span className="nav-label">{full}</span> : <span className="rc-nav-text">{variant === "bar" ? short : full}</span>}
     </button>;
 
   return <>
@@ -45,7 +45,7 @@ export default function AppNav({items, active, onSelect, label, primary = 4, loc
     <nav className="rc-nav-bar" aria-label={label}>
       {bar.map(i => button(i, "bar"))}
       {rest.length > 0 && <button type="button" className={`nav${inRest ? " active" : ""}`} aria-haspopup="dialog" aria-expanded={sheet} onClick={() => setSheet(true)}>
-        <span aria-hidden="true"><Icon name="menu" size={20}/></span><span className="nav-label">More</span>
+        <span aria-hidden="true"><Icon name="menu" size={20}/></span><span className="rc-nav-text">More</span>
       </button>}
     </nav>
     {rest.length > 0 && <dialog ref={sheetRef} className="rc-nav-sheet" aria-label="More pages" onCancel={() => setSheet(false)} onClose={() => setSheet(false)}>

@@ -1001,13 +1001,39 @@ test('trainers keep their own list of workouts and use them when planning a day'
  assert.match((await callAction('app/actions/workouts.ts', 'deleteWorkout', [Number(w.id)], akif, '/trainer')).ok ?? '', /deleted/);
 });
 
-test('members see Sessions, a locked Growth page and a phone menu with More', async () => {
+test('members see Sessions, phone data inside My progress, their name in the top bar and labelled phone menu', async () => {
  const member = await currentCookie('u-member-aarav', 'member');
- const growth = await (await visit('/member/growth', member)).text();
- assert.match(readableText(growth), /COMING SOON .*Your growth, from your phone and band/);
- assert.match(growth, /class="rc-nav-bar"/);
- assert.match(readableText(growth), /More/, 'Pages that don’t fit the phone bar are under More');
- assert.equal((await visit('/member/nowhere', member)).status, 404);
+ const progress = await (await visit('/member/progress', member)).text();
+ assert.match(readableText(progress), /COMING SOON .*Your growth, from your phone and band/, 'Growth is part of My progress');
+ assert.match(progress, /class="rc-nav-bar"/);
+ assert.match(progress, /<span class="rc-nav-text">Home<\/span>/, 'The phone menu has labels, not just icons');
+ assert.match(readableText(progress), /More/, 'Pages that don’t fit the phone bar are under More');
+ assert.match(readableText(progress), /Aarav Sharma member@repcount\.demo/, 'The top bar shows who is signed in');
+ assert.match(progress, /class="rc-topbar-brand"/, 'The logo shows in the top bar on phones');
+ assert.match(progress, /class="sidebar-bottom rc-sidebar-bottom"/, 'Log out sits at the bottom of the sidebar');
+ assert.equal((await visit('/member/growth', member)).status, 404, 'Growth has no page of its own');
+ const home = readableText(await (await visit('/member/overview', member)).text());
+ assert.doesNotMatch(home, /A little structure|YOUR MOMENTUM|Coached every week/, 'Home keeps only what members use');
+});
+
+test('trainers build workouts from a searchable exercise library and add their own exercises', async () => {
+ const akif = await currentCookie('u-trainer-akif', 'trainer');
+ const added = await callAction('app/actions/exercises.ts', 'addExercise', ['Kettlebell swing'], akif, '/trainer?tab=workouts');
+ assert.match(added.ok ?? JSON.stringify(added), /Kettlebell swing/);
+ assert.match((await callAction('app/actions/exercises.ts', 'addExercise', ['Squat · 3 × 10'], akif, '/trainer')).error ?? '', /Leave out/);
+ const again = await callAction('app/actions/exercises.ts', 'addExercise', ['kettlebell SWING'], akif, '/trainer');
+ assert.ok(again.ok, 'Adding the same name again reuses it');
+ assert.equal((await sql`select count(*)::int as n from exercises where trainer_id = 'u-trainer-akif' and lower(name) = 'kettlebell swing'`)[0].n, 1);
+ assert.ok((await sql`select count(*)::int as n from exercises where trainer_id is null`)[0].n > 40, 'RepCount’s exercise library is there');
+ const page = readableText(await (await visit('/trainer?tab=workouts', akif)).text());
+ assert.match(page, /Your exercises .*Kettlebell swing/);
+ const [own] = await sql`select id from exercises where trainer_id = 'u-trainer-akif' and name = 'Kettlebell swing'`;
+ const [builtIn] = await sql`select id from exercises where trainer_id is null limit 1`;
+ assert.match((await callAction('app/actions/exercises.ts', 'deleteExercise', [Number(builtIn.id)], akif, '/trainer')).error ?? '', /Only your own/);
+ assert.match((await callAction('app/actions/exercises.ts', 'deleteExercise', [Number(own.id)], akif, '/trainer')).ok ?? '', /removed/);
+ const day = await (await visit(`/trainer/clients/c-aarav/workouts/${istWeekStart()}/tuesday`, akif)).text();
+ assert.match(day, /class="rc-builder"/, 'The day editor uses the workout builder');
+ assert.doesNotMatch(day, /one per line/, 'No free-text box for exercises');
 });
 
 test('llms.txt and the sitemap describe the site and list every article', async () => {

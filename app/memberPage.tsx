@@ -6,6 +6,7 @@ import {clientDetail, confirmedDays, getClient, getMemberLog, getNutritionPlan, 
 import {healthForClient} from "@/lib/health";
 import {listSessions} from "@/lib/sessionStore";
 import {listSavedWorkouts} from "@/lib/workoutLibrary";
+import {listExercises} from "@/lib/exerciseStore";
 import {clientMonth} from "@/lib/calendarLog";
 import {shiftDay} from "@/lib/streak";
 import ClientDetail, {type MemberSection} from "./ClientDetail";
@@ -53,8 +54,9 @@ export async function memberPage(viewer: "trainer" | "admin", id: string, sectio
     section === "progress" ? healthForClient(id, shiftDay(today, -13)) : null,
   ]);
   if (!detail || (!admin && detail.client.trainerId !== user.id)) notFound();
-  const saved = section === "workouts" && day !== undefined ? await listSavedWorkouts(detail.client.trainerId) : [];
+  const dayEditor = section === "workouts" && day !== undefined;
+  const [saved, exercises] = dayEditor ? await Promise.all([listSavedWorkouts(detail.client.trainerId), listExercises(detail.client.trainerId)]) : [[], []];
   // The sidebar, header and tabs around this come from the [id] layout (ClientShell), so only this part loads per section.
   return <ClientDetail viewer={viewer} section={section} detail={detail} log={log} health={health}
-    coaching={{weeks, plans, nutrition, confirmed, today, week: week ?? weeks[0].start, day, saved}}/>;
+    coaching={{weeks, plans, nutrition, confirmed, today, week: week ?? weeks[0].start, day, saved, exercises}}/>;
 }
